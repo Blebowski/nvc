@@ -345,6 +345,8 @@ object_class_t tree_object = {
    .gc_num_roots   = 5
 };
 
+int tree_print_depth = 0;
+
 static bool tree_kind_in(tree_t t, const tree_kind_t *list, size_t len)
 {
    for (size_t i = 0; i < len; i++) {
@@ -1044,6 +1046,39 @@ unsigned tree_visit_only(tree_t t, tree_visit_fn_t fn,
    object_visit(&(t->object), &ctx);
 
    return ctx.count;
+}
+
+static void tree_print_preorder(tree_t t, void *context)
+{
+   tree_print_depth++;
+
+   char indent[tree_print_depth];
+   memset(indent, ' ', sizeof(char) * tree_print_depth);
+   indent[tree_print_depth] = '\0';
+   
+   printf("%s %s\n", indent, tree_kind_str(t->object.kind));
+}
+
+static void tree_print_postorder(tree_t t, void *context)
+{
+   tree_print_depth--;
+}
+
+void tree_print(tree_t t)
+{
+   assert(t != NULL);
+
+   object_visit_ctx_t ctx = {
+      .count      = 0,
+      .postorder  = tree_print_postorder,
+      .preorder   = tree_print_preorder,
+      .context    = NULL,
+      .kind       = T_LAST_TREE_KIND,
+      .generation = object_next_generation(),
+      .deep       = false
+   };
+
+   object_visit(&(t->object), &ctx);
 }
 
 tree_wr_ctx_t tree_write_begin(fbuf_t *f)

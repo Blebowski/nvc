@@ -338,6 +338,7 @@ typedef void (*tree_visit_fn_t)(tree_t t, void *context);
 unsigned tree_visit(tree_t t, tree_visit_fn_t fn, void *context);
 unsigned tree_visit_only(tree_t t, tree_visit_fn_t fn,
                          void *context, tree_kind_t kind);
+void tree_print(tree_t t);
 
 typedef tree_t (*tree_rewrite_fn_t)(tree_t t, void *context);
 tree_t tree_rewrite(tree_t t, tree_rewrite_fn_t fn, void *context);
