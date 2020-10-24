@@ -3804,6 +3804,20 @@ static void p_sensitivity_list(tree_t proc)
       tree_add_trigger(proc, p_name());
 }
 
+static void p_process_sensitivity_list(tree_t proc)
+{
+   if (peek() == tALL){
+      if (standard() < STD_08)
+         parse_error(CURRENT_LOC, "ALL unsupported in sensitivity list in VHDL-%s",
+                     standard_text(standard()));
+      consume(tALL);
+      tree_set_flag(proc, TREE_F_SENSITIVE_ALL);
+      return;
+   }
+
+   p_sensitivity_list(proc);
+}
+
 static void p_process_declarative_item(tree_t proc)
 {
    // subprogram_declaration | subprogram_body | type_declaration
@@ -3903,7 +3917,7 @@ static tree_t p_process_statement(ident_t label)
    consume(tPROCESS);
 
    if (optional(tLPAREN)) {
-      p_sensitivity_list(t);
+      p_process_sensitivity_list(t);
       consume(tRPAREN);
    }
 

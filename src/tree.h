@@ -176,6 +176,7 @@ typedef enum {
    TREE_F_LAST_VALUE      = (1 << 10),
    TREE_F_PACKAGE_SIGNAL  = (1 << 11),
    TREE_F_SYNTHETIC_NAME  = (1 << 12),
+   TREE_F_SENSITIVE_ALL   = (1 << 13)
 } tree_flags_t;
 
 tree_t tree_new(tree_kind_t kind);
