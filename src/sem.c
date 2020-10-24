@@ -2887,12 +2887,16 @@ static bool sem_check_process(tree_t t)
 
    scope_pop();
 
-   if (tree_triggers(t) > 0) {
+   if (tree_triggers(t) > 0 || (tree_flags(t) & TREE_F_SENSITIVE_ALL)) {
       // No wait statements allowed in process with sensitivity list
       if (tree_visit_only(t, NULL, NULL, T_WAIT) > 0)
          sem_error(t, "wait statement not allowed in process "
                    "with sensitvity list");
    }
+
+   // TODO: Need to check that process sensitized by ALL does not call
+   //       subprogram which reads signals not declared in local unit
+   //       and are not passed as parameters!
 
    return ok;
 }

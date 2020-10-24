@@ -517,8 +517,87 @@ static tree_t simp_array_ref(tree_t t)
    }
 }
 
+static void simp_build_sensitivity_list(tree_t proc, tree_t stmt)
+{
+   /* 11.3 IEEE 1076-2008 - rules for building process senstivity list */
+   switch (tree_kind(stmt))
+   {
+      /* T_ASSERT also covers report statement */
+      case T_ASSERT:
+         simp_build_wait(proc, tree_value(stmt));
+         if (tree_has_message(stmt))
+            simp_build_wait(proc, tree_message(stmt));
+         break;
+
+      case T_NEXT:
+      case T_EXIT:
+      case T_RETURN:
+         if (tree_has_value(stmt))
+            simp_build_wait(proc, tree_value(stmt));
+         break;
+
+      case T_VAR_ASSIGN:
+         simp_build_wait(proc, tree_value(stmt));
+         // TODO: Index names or slice names in target
+         break;
+
+      case T_SIGNAL_ASSIGN:
+         for (int i = 0; i < tree_waveforms(stmt); i++)
+            simp_build_wait(proc, tree_waveform(stmt, i));
+         // TODO: Index names or slice names in target
+         break;
+
+      case T_IF:
+         simp_build_wait(proc, tree_value(stmt));
+         for (int i = 0; i < tree_stmts(stmt); i++)
+            simp_build_sensitivity_list(proc, tree_stmt(stmt, i));
+         for (int i = 0; i < tree_else_stmts(stmt); i++)
+            simp_build_sensitivity_list(proc, tree_else_stmt(stmt, i));
+         break;
+
+      case T_CASE:
+         simp_build_wait(proc, tree_value(stmt));
+         for (int i = 0; i < tree_assocs(stmt); i++)
+         {
+            tree_t block = tree_value(tree_assoc(stmt, i));
+            for (int j = 0; j < tree_stmts(block); j++)
+               simp_build_sensitivity_list(proc, tree_stmt(block, j));
+         }
+         break;
+
+      case T_WHILE:
+         simp_build_wait(proc, tree_value(stmt));
+         for (int i = 0; i < tree_stmts(stmt); i++)
+               simp_build_sensitivity_list(proc, tree_stmt(stmt, i));
+         break;
+
+      case T_FOR:
+         {
+         range_t range = tree_range(stmt, 0);
+         simp_build_wait(proc, range.left);
+         simp_build_wait(proc, range.right);
+         break;
+         }
+
+      case T_PCALL:
+      case T_FCALL:
+         for (int i = 0; i < tree_params(stmt); i++){
+            tree_t param = tree_param(stmt, i);
+            simp_build_wait(proc, tree_value(param));
+         }
+
+      default:
+            break;
+      }
+}
+
 static tree_t simp_process(tree_t t)
 {
+   // Build sensitivity list if ALL keyword was used in sensitivity list
+   if (tree_flags(t) & TREE_F_SENSITIVE_ALL)
+      for (int i = 0; i < tree_stmts(t); i++)
+         simp_build_sensitivity_list(t, tree_stmt(t, i));
+
    // Replace sensitivity list with a "wait on" statement
    const int ntriggers = tree_triggers(t);
    if (ntriggers > 0) {
@@ -659,6 +738,8 @@ static void simp_build_wait(tree_t wait, tree_t expr)
 {
    // Add each signal referenced in an expression to the trigger
    // list for a wait statement
+   // Also used for process to build sensitivity list when "ALL"
+   // is used.
 
    switch (tree_kind(expr)) {
    case T_REF:
