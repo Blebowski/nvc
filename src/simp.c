@@ -517,6 +517,51 @@ static tree_t simp_array_ref(tree_t t)
    }
 }
 
+static void simp_build_signal_assign_sensitivity(tree_t proc, tree_t stmt)
+{
+   assert(tree_kind(stmt) == T_SIGNAL_ASSIGN);
+
+   for (int i = 0; i < tree_waveforms(stmt); i++)
+      simp_build_wait(proc, tree_waveform(stmt, i));
+
+   tree_t target = tree_target(stmt);
+   switch (tree_kind(target))
+   {
+   /* Skip direct refs since we dont want process to be sensitized by signal
+    * that it updates. This prevents triggering process twice
+    */
+   case T_REF:
+      break;
+   
+   /* Search bounds of slice for sensitive nodes, skip value. */
+   case T_ARRAY_SLICE:
+   {
+      range_t r = tree_range(target, 0);
+      if (r.left != NULL)
+         simp_build_wait(proc, r.left);
+      if (r.right != NULL)
+         simp_build_wait(proc, r.right);
+      break;
+   }
+
+   /* Search params (indexes), skip value */
+   case T_ARRAY_REF:
+   case T_CONCAT:
+   case T_TYPE_CONV:
+      {
+         const int nparams = tree_params(target);
+         for (int i = 0; i < nparams; i++)
+            simp_build_wait(proc, tree_value(tree_param(target, i)));
+      }
+      break;
+
+   default:
+      fatal_trace("Cannot handle tree kind %s in signal assign expression",
+                  tree_kind_str(tree_kind(target)));
+      break;
+   }
+}
+
 static void simp_build_sensitivity_list(tree_t proc, tree_t stmt)
 {
    /* 11.3 IEEE 1076-2008 - rules for building process senstivity list */
@@ -524,7 +569,8 @@ static void simp_build_sensitivity_list(tree_t proc, tree_t stmt)
    {
       /* T_ASSERT also covers report statement */
       case T_ASSERT:
-         simp_build_wait(proc, tree_value(stmt));
+         if (tree_has_value(stmt))
+            simp_build_wait(proc, tree_value(stmt));
          if (tree_has_message(stmt))
             simp_build_wait(proc, tree_message(stmt));
          break;
@@ -538,13 +584,11 @@ static void simp_build_sensitivity_list(tree_t proc, tree_t stmt)
 
       case T_VAR_ASSIGN:
          simp_build_wait(proc, tree_value(stmt));
-         // TODO: Index names or slice names in target
+         simp_build_wait(proc, tree_target(stmt));
          break;
 
       case T_SIGNAL_ASSIGN:
-         for (int i = 0; i < tree_waveforms(stmt); i++)
-            simp_build_wait(proc, tree_waveform(stmt, i));
-         // TODO: Index names or slice names in target
+         simp_build_signal_assign_sensitivity(proc, stmt);
          break;
 
       case T_IF:
@@ -589,6 +633,10 @@ static void simp_build_sensitivity_list(tree_t proc, tree_t stmt)
       default:
             break;
       }
+
+   // TODO: Walk through signals read by sub-programs called by process but
+   //       not passed as explicit parameters. These should also sensitize
+   //       the process!
 }
 
 static tree_t simp_process(tree_t t)
