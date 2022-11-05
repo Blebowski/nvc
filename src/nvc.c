@@ -230,6 +230,7 @@ static int elaborate(int argc, char **argv)
       { 0, 0, 0, 0 }
    };
 
+   cover_mask_t cover_mask = 0;
    const int next_cmd = scan_cmd(2, argc, argv);
    int c, index = 0;
    const char *spec = "Vg:O:";
@@ -251,7 +252,6 @@ static int elaborate(int argc, char **argv)
          opt_set_str(OPT_DUMP_VCODE, optarg ?: "");
          break;
       case 'c':
-         opt_set_int(OPT_COVER, 1);
          if (optarg) {
             char prev = 0;
             int n_chars = 0;
@@ -260,11 +260,11 @@ static int elaborate(int argc, char **argv)
                printf("Processing coverage type %c\n", *optarg);
                if (*optarg == ',' || *optarg == '\0') {
                   if (prev == 's')
-                     opt_set_int(OPT_COVER_STMT, 1);
+                     cover_mask |= COVER_MASK_STMT;
                   else if (prev == 't')
-                     opt_set_int(OPT_COVER_TOGGLE, 1);
+                     cover_mask |= COVER_MASK_TOGGLE;
                   else if (prev == 'b')
-                     opt_set_int(OPT_COVER_BRANCH, 1);
+                     cover_mask |= COVER_MASK_BRANCH;
                   else
                      fatal("Unknown coverage type '%c'. Valid coverage types are: \n"
                         "  s (statement)\n"
@@ -282,11 +282,8 @@ static int elaborate(int argc, char **argv)
                optarg++;
             } while (*optarg != '\0');
          }
-         else {
-            opt_set_int(OPT_COVER_BRANCH, 1);
-            opt_set_int(OPT_COVER_STMT, 1);
-            opt_set_int(OPT_COVER_TOGGLE, 1);
-         }
+         else
+            cover_mask = COVER_MASK_ALL;
          break;
       case 'V':
          opt_set_int(OPT_VERBOSE, 1);
@@ -325,14 +322,13 @@ static int elaborate(int argc, char **argv)
    progress("elaborating design");
 
    cover_tagging_t *cover = NULL;
-   if (opt_get_int(OPT_COVER)) {
-      cover = cover_tags_init();
-   }
+   if (cover_mask != 0)
+      cover = cover_tags_init(cover_mask);
 
    vcode_unit_t vu = lower_unit(top, cover);
    progress("generating intermediate code");
 
-   if (opt_get_int(OPT_COVER)) {
+   if (cover != NULL) {
       fbuf_t *covdb =  cover_open_lib_file(top, FBUF_OUT, true);
       cover_dump_tags(cover, covdb, COV_DUMP_ELAB, NULL, NULL, NULL);
       fbuf_close(covdb, NULL);
