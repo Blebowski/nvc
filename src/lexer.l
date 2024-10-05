@@ -331,6 +331,7 @@ TIMINGENV         ?i:TIMINGENV
 RETAIN            ?i:RETAIN
 SCOND             ?i:SCOND
 CCOND             ?i:CCOND
+CORRELATION       ?i:CORRELATION
 
 %%
 
@@ -784,6 +785,7 @@ CCOND             ?i:CCOND
 <SDF>{RETAIN}           { TOKEN(tRETAIN); }
 <SDF>{SCOND}            { TOKEN(tSCOND); }
 <SDF>{CCOND}            { TOKEN(tCCOND); }
+<SDF>{CORRELATION}      { TOKEN(tCORRELATION); }
 
 <SDF,SDF_EXPR>{SDF_ID}  { yylval.str = xstrdup(yytext); TOKEN(tID); }
 

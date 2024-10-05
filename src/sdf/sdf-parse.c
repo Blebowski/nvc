@@ -294,6 +294,35 @@ static ident_t error_marker(void)
 #define PARSE_TYP_DELAYS      (!!(sdf_file->min_max_spec & S_F_TYP_VALUES))
 #define PARSE_MAX_DELAYS      (!!(sdf_file->min_max_spec & S_F_MAX_VALUES))
 
+// Check SDF standard is one of passed values
+#define require_sdf_std(...) _require_sdf_std(1, __VA_ARGS__, -1)
+
+static void _require_sdf_std(int n, const char *feature, ...)
+{
+   va_list ap;
+   va_start(ap, n);
+
+   const char *msg = va_arg(ap, char *);
+
+   bool found = false;
+   while (!found) {
+      const sdf_std_t val = va_arg(ap, sdf_std_t);
+      if (val == -1)
+         break;
+      else if (sdf_file->std == val)
+         found = true;
+   }
+
+   if (!found) {
+      diag_t *d = diag_new(DIAG_ERROR, &state.last_loc);
+      diag_printf(d, "%s is not supported in SDF %d.%d",
+                  feature, sdf_file->std / 10, sdf_file->std % 10);
+      diag_emit(d);
+   }
+
+   va_end(ap);
+}
+
 static inline bool is_next_tok_signed_number(void)
 {
    return scan(tINT, tREAL, tPLUS, tMINUS);
@@ -1110,8 +1139,11 @@ static void p_path_constraint(void)
    consume(tLPAREN);
    consume(tPATHCONSTR);
 
-   if (peek_nth(2) == tNAME)
+   if (peek_nth(2) == tNAME) {
+      require_sdf_std("name in PATHCONSTRAINT environment construct",
+                      SDF_STD_3_0, SDF_STD_4_0);
       p_name();
+   }
 
    p_port_instance();
    p_port_instance();
@@ -1151,6 +1183,10 @@ static void p_period_constraint(void)
    BEGIN("period constraint");
 
    consume(tLPAREN);
+
+   require_sdf_std("PERIODCONSTRAINT environment construct",
+                   SDF_STD_3_0, SDF_STD_4_0);
+
    consume(tPERIODCONSTR);
 
    p_port_instance();
@@ -1246,6 +1282,9 @@ static void p_arrival_env(void)
    BEGIN("arrival env");
 
    consume(tLPAREN);
+
+   require_sdf_std("ARRIVAL environment construct", SDF_STD_3_0, SDF_STD_4_0);
+
    consume(tARRIVAL);
 
    if (scan(tLPAREN))
@@ -1266,6 +1305,9 @@ static void p_departure_env(void)
    BEGIN("departure env");
 
    consume(tLPAREN);
+
+   require_sdf_std("DEPARTURE environment construct", SDF_STD_3_0, SDF_STD_4_0);
+
    consume(tDEPARTURE);
 
    if (scan(tLPAREN))
@@ -1287,6 +1329,9 @@ static void p_slack_env(void)
    BEGIN("slack env");
 
    consume(tLPAREN);
+
+   require_sdf_std("SLACK environment construct", SDF_STD_3_0, SDF_STD_4_0);
+
    consume(tSLACK);
 
    p_port_instance();
@@ -1308,6 +1353,9 @@ static void p_waveform_env(void)
    BEGIN("waveform env");
 
    consume(tLPAREN);
+
+   require_sdf_std("WAVEFORM environment construct", SDF_STD_3_0, SDF_STD_4_0);
+
    consume(tWAVEFORM);
 
    p_port_instance();
@@ -1465,6 +1513,9 @@ static void p_lbl_spec(void)
    BEGIN("lbl spec");
 
    consume(tLPAREN);
+
+   require_sdf_std("LABEL construct", SDF_STD_4_0)
+
    consume(tLABEL);
 
    do
@@ -1611,6 +1662,7 @@ static void p_scond_or_ccond(sdf_cond_kind_t kind)
          BEGIN(msg);                                                          \
                                                                               \
          consume(tLPAREN);                                                    \
+         require_std(msg, SDF_STD_3_0, SDF_STD_4_0);                          \
          consume(tok);                                                        \
                                                                               \
          bool cond_seen = false;                                              \
@@ -1889,6 +1941,10 @@ static void p_netdelay_def(void)
    BEGIN("netdelay def");
 
    consume(tLPAREN);
+
+   require_sdf_std("netdelay construct",
+                   SDF_STD_1_0, SDF_STD_2_0, SDF_STD_2_1, SDF_STD_4_0);
+
    consume(tNETDELAY);
 
    p_port_spec();
@@ -1946,8 +2002,13 @@ static void p_deldef_list(sdf_flags_t flag)
       case tNETDELAY:
          p_netdelay_def();
          break;
-      default: // tDEVICE
+      case tDEVICE:
          p_device_def();
+         break;
+      default:
+         consume(tLPAREN);
+         one_of(tIOPATH, tSDFCOND, tSDFCONDELSE, tPORT,
+                tINTERCONNECT, tNETDELAY, tDEVICE);
       }
 
       tok = peek_nth(2);
@@ -2026,6 +2087,12 @@ static void p_cell(void)
    // cell_instance ::=
    //       ( INSTANCE [ hierarchical_identifier ] )
    //     | ( INSTANCE * )
+   // correlation ::=
+   //       ( CORRELATION qstring [corr_factor] )
+   // corr_factor ::=
+   //       number
+   //     | tripple
+   //
 
    BEGIN("cell");
 
@@ -2043,6 +2110,24 @@ static void p_cell(void)
    // cell_instance
    p_cell_instance();
 
+   // Correlation
+   if (peek_nth(2) == tCORRELATION) {
+      consume(tLPAREN);
+
+      require_sdf_std("CORRELATION construct", SDF_STD_2_0, SDF_STD_2_1);
+
+      consume(tCORRELATION);
+
+      p_qstring();
+
+      if (optional(tLPAREN)) {
+         p_real_number_or_tripple();
+         consume(tRPAREN);
+      }
+
+      consume(tRPAREN);
+   }
+
    // { timing_spec }
    int tok = peek_nth(2);
    while (tok == tDELAY || tok == tTIMINGCHECK ||
@@ -2058,8 +2143,12 @@ static void p_cell(void)
       case tLABEL:
          p_lbl_spec();
          break;
-      default: // tTIMINGENV
+      case tTIMINGENV:
          p_te_spec();
+         break;
+      default:
+         consume(tLPAREN);
+         one_of(tDELAY, tTIMINGCHECK, tLABEL, tTIMINGENV);
       }
 
       tok = peek_nth(2);

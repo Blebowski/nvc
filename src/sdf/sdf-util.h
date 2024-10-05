@@ -24,11 +24,11 @@
 // SDF standard revisions
 //
 typedef enum {
-   SDF_STD_1_0,
-   SDF_STD_2_0,
-   SDF_STD_2_1,
-   SDF_STD_3_0,
-   SDF_STD_4_0
+   SDF_STD_1_0             = 10,
+   SDF_STD_2_0             = 20,
+   SDF_STD_2_1             = 21,
+   SDF_STD_3_0             = 30,
+   SDF_STD_4_0             = 40
 } sdf_std_t;
 
 typedef enum {
