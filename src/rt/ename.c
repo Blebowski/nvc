@@ -76,6 +76,9 @@ void x_bind_external(tree_t name, jit_scalar_t *result)
    else
       top = root_scope(m)->where;
 
+   printf("Tree kind is: %s\n", tree_kind_str(tree_kind(top)));
+   printf("Hier is: %s\n", istr(tree_ident(top)));
+
    assert(tree_kind(top) == T_ELAB);
    tree_t root = tree_stmt(top, 0);
 

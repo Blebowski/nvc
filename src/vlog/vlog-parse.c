@@ -2318,7 +2318,7 @@ static void p_simple_path_declaration(void)
    p_path_delay_value();
 }
 
-static void p_path_declaration(void)
+static vlog_node_t p_path_declaration(void)
 {
    // simple_path_declaration ; | edge_sensitive_path_declaration ;
    //   | state_dependent_path_declaration ;
@@ -2328,9 +2328,102 @@ static void p_path_declaration(void)
    p_simple_path_declaration();
 
    consume(tSEMI);
+
+   return NULL;
 }
 
-static void p_specify_item(void)
+static void p_specify_terminal_descriptor(void)
+{
+
+}
+
+static void p_timing_check_condition(void)
+{
+
+}
+
+static void p_timing_check_event_control(void)
+{
+
+}
+
+static vlog_node_t p_timing_check_event(bool is_controlled)
+{
+   // timing_check_event ::=
+   //    timing_check_event_control specify_terminal_descriptor [ &&& timing_check_condition ]
+   // controlled_timing_check_event ::=
+   //    [timing_check_event_control] specify_terminal_descriptor [ &&& timing_check_condition ]
+
+   BEGIN("timing check event");
+
+   if (is_controlled || scan(tPOSEDGE, tNEGEDGE)) {
+      switch (one_of(tPOSEDGE, tNEGEDGE)) {
+      case tPOSEDGE:
+         break;
+      case tNEGEDGE:
+         break;
+      default:
+      }
+   }
+
+   p_identifier();
+}
+
+static vlog_node_t p_system_timing_check(void)
+{
+   //   $setup_timing_check | $hold_timing_check | $setuphold_timing_check
+   // | $recovery_timing_check | $removal_timing_check | $recrem_timing_check
+   // | $skew_timing_check | $timeskew_timing_check | $fullskew_timing_check
+   // | $period_timing_check | $width_timing_check | $nochange_timing_check
+
+   BEGIN("system timing check");
+
+   ident_t id = p_system_tf_identifier();
+   v_tcheck_kind_t kind;
+
+   switch (is_well_known(id)) {
+   case W_DOLLAR_SETUP:
+      kind = V_TCHECK_SETUP;
+      break;
+   case W_DOLLAR_HOLD:
+      kind = V_TCHECK_HOLD;
+      break;
+   default:
+      parse_error(&state.last_loc, "'%s' is not a valid timing check",
+                  istr(id));
+   }
+
+   vlog_node_t v = vlog_new(V_TIMING_CHECK);
+   vlog_set_ident(v, id);
+
+   consume(tLPAREN);
+
+   switch (kind) {
+   case V_TCHECK_SETUP:
+   case V_TCHECK_HOLD:
+      vlog_add_param(v, p_timing_check_event(false));
+      consume(tCOMMA);
+
+      vlog_add_param(v, p_timing_check_event(false));
+      consume(tCOMMA);
+
+      vlog_add_param(v, p_expression());
+
+      if (optional(tCOMMA))
+         if (scan(tID))
+            vlog_add_param(v, p_identifier());
+      break;
+
+   default:
+      error("invalid timing check '%s'", istr(id));
+   }
+
+   consume(tRPAREN);
+
+   return v;
+}
+
+static vlog_node_t p_specify_item(void)
 {
    // specparam_declaration | pulsestyle_declaration | showcancelled_declaration
    //   | path_declaration | system_timing_check
@@ -2339,11 +2432,16 @@ static void p_specify_item(void)
 
    switch (peek()) {
    case tLPAREN:
-      p_path_declaration();
+      return p_path_declaration();
+      break;
+   case tSYSTASK:
+      return p_system_timing_check();
       break;
    default:
       one_of(tLPAREN);
    }
+
+   return NULL;
 }
 
 static vlog_node_t p_specify_block(void)
@@ -2357,7 +2455,7 @@ static vlog_node_t p_specify_block(void)
    vlog_node_t v = vlog_new(V_SPECIFY);
 
    while (not_at_token(tENDSPECIFY))
-      p_specify_item();
+      vlog_add_stmt(v, p_specify_item());
 
    consume(tENDSPECIFY);
 

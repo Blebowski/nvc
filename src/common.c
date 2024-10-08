@@ -1115,6 +1115,8 @@ void intern_strings(void)
    id_cache[W_DOLLAR_DISPLAY]  = ident_new("$display");
    id_cache[W_DOLLAR_FINISH]   = ident_new("$finish");
    id_cache[W_DOLLAR_WRITE]    = ident_new("$write");
+   id_cache[W_DOLLAR_SETUP]    = ident_new("$setup");
+   id_cache[W_DOLLAR_HOLD]     = ident_new("$hold");
    id_cache[W_STD_REFLECTION]  = ident_new("STD.REFLECTION");
    id_cache[W_NEVER_WAITS]     = ident_new("NEVER_WAITS");
    id_cache[W_NVC_VERILOG]     = ident_new("NVC.VERILOG");

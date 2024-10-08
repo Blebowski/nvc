@@ -43,6 +43,11 @@ typedef enum {
 } v_sysfunc_kind_t;
 
 typedef enum {
+   V_TCHECK_SETUP,
+   V_TCHECK_HOLD
+} v_tcheck_kind_t;
+
+typedef enum {
    V_NET_WIRE,
    V_NET_SUPPLY0,
    V_NET_SUPPLY1,
@@ -92,6 +97,7 @@ typedef enum {
    V_ENUM_NAME,
    V_UNION_DECL,
    V_STRUCT_DECL,
+   V_TIMING_CHECK,
 
    V_LAST_NODE_KIND
 } vlog_kind_t;
