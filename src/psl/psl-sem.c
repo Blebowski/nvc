@@ -181,6 +181,11 @@ static void psl_check_sequence_inst(psl_node_t p)
 
 }
 
+static void psl_check_seq_implication(psl_node_t p, nametab_t *tab)
+{
+
+}
+
 static void psl_check_sere(psl_node_t p, nametab_t *tab)
 {
    const int nops = psl_operands(p);
@@ -198,12 +203,16 @@ static void psl_check_implication(psl_node_t p, nametab_t *tab)
    psl_node_t right = psl_operand(p, 1);
    psl_check(right, tab);
 
-   if (psl_kind(left) != P_HDL_EXPR || psl_type(left) != PSL_TYPE_BOOLEAN)
-      error_at(psl_loc(p), "property is not in the simple subset as the left "
-               "hand side of this implication is non-Boolean");
-   else if (psl_subkind(p) == PSL_IMPL_IFF && psl_kind(right) != P_HDL_EXPR)
-      error_at(psl_loc(p), "property is not in the simple subset as the right "
-               "hand side of this implication is non-Boolean");
+   psl_impl_kind_t subkind = psl_subkind(p);
+
+   if (subkind == PSL_IMPL_IFF || subkind == PSL_IMPL_IF) {
+      if (psl_kind(left) != P_HDL_EXPR || psl_type(left) != PSL_TYPE_BOOLEAN)
+         error_at(psl_loc(p), "property is not in the simple subset as the left "
+                  "hand side of this implication is non-Boolean");
+      else if (subkind == PSL_IMPL_IFF && psl_kind(right) != P_HDL_EXPR)
+         error_at(psl_loc(p), "property is not in the simple subset as the right "
+                  "hand side of this implication is non-Boolean");
+   }
 }
 
 static void psl_check_next(psl_node_t p, nametab_t *tab)
@@ -307,6 +316,9 @@ void psl_check(psl_node_t p, nametab_t *tab)
       break;
    case P_UNTIL:
       psl_check_until(p, tab);
+      break;
+   case P_SEQ_IMPLICATION:
+      psl_check_seq_implication(p, tab);
       break;
    default:
       fatal_trace("cannot check PSL kind %s", psl_kind_str(psl_kind(p)));

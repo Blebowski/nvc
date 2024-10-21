@@ -170,6 +170,14 @@ static fsm_state_t *build_implication(psl_fsm_t *fsm, fsm_state_t *state,
    }
 }
 
+static fsm_state_t *build_seq_implication(psl_fsm_t *fsm, fsm_state_t *state,
+                                          psl_node_t p)
+{
+   psl_node_t lhs = psl_operand(p, 0);
+   psl_node_t rhs = psl_operand(p, 1);
+
+}
+
 static fsm_state_t *build_until(psl_fsm_t *fsm, fsm_state_t *state,
                                 psl_node_t p)
 {
@@ -246,6 +254,8 @@ static fsm_state_t *build_node(psl_fsm_t *fsm, fsm_state_t *state, psl_node_t p)
       return build_sere(fsm, state, p);
    case P_IMPLICATION:
       return build_implication(fsm, state, p);
+   case P_SEQ_IMPLICATION:
+      return build_seq_implication(fsm, state, p);
    case P_UNTIL:
       return build_until(fsm, state, p);
    default:
