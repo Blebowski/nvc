@@ -28,6 +28,7 @@
 #include "phase.h"
 #include "thread.h"
 #include "type.h"
+#include "psl/psl-node.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -4871,6 +4872,36 @@ static type_t solve_range(nametab_t *tab, tree_t r)
    }
 }
 
+type_t solve_psl_type(nametab_t *tab, tree_t expr)
+{
+   psl_node_t p = tree_psl(expr);
+   psl_kind_t kind = psl_kind(p);
+
+   switch (kind) {
+   case P_BUILTIN_FUNC:
+   {
+      switch (psl_subkind(p)) {
+      case PSL_BUILTIN_PREV:
+      case PSL_BUILTIN_NEXT:
+      {
+         type_t type = solve_types(tab, psl_tree(psl_operand(p, 0)), NULL);
+         return type;
+      }
+      case PSL_BUILTIN_STABLE:
+      case PSL_BUILTIN_ROSE:
+      case PSL_BUILTIN_FELL:
+      case PSL_BUILTIN_ENDED:
+         return std_type(NULL, STD_BOOLEAN);
+      case PSL_BUILTIN_NONDET:
+      case PSL_BUILTIN_NONDET_VECTOR:
+         return type_new(T_NONE);
+      }
+   }
+   default:
+      fatal_trace("cannot solve types for psl_kind %s", psl_kind_str(kind));
+   }
+}
+
 static type_t try_solve_type(nametab_t *tab, tree_t expr)
 {
    switch (tree_kind(expr)) {
@@ -4889,6 +4920,8 @@ static type_t try_solve_type(nametab_t *tab, tree_t expr)
       return try_solve_open(tab, expr);
    case T_ATTR_REF:
       return try_solve_attr_ref(tab, expr);
+   case T_PSL:
+      return solve_psl_type(tab, expr);
    default:
       fatal_trace("cannot solve types for %s", tree_kind_str(tree_kind(expr)));
    }
@@ -4947,6 +4980,8 @@ static type_t _solve_types(nametab_t *tab, tree_t expr)
       return solve_view_element(tab, expr);
    case T_INERTIAL:
       return solve_inertial(tab, expr);
+   case T_PSL:
+      return solve_psl_type(tab, expr);
    default:
       fatal_trace("cannot solve types for %s", tree_kind_str(tree_kind(expr)));
    }

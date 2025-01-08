@@ -417,6 +417,35 @@ static void psl_check_clocked(psl_node_t p, nametab_t *tab, bool toplevel)
                "outermost level of a property");
 }
 
+static void psl_check_builtin_func(psl_node_t p, nametab_t *tab)
+{
+   psl_builtin_kind_t kind = psl_subkind(p);
+
+   switch (kind) {
+   case PSL_BUILTIN_PREV:
+   {
+      int n_ops = psl_operands(p);
+      if (n_ops == 3)
+         error_at(psl_loc(psl_operand(p, 2)), "sorry, custom clock context is not supported");
+
+      assert (n_ops == 1 || n_ops == 2);
+
+      psl_check_hdl_expr(psl_operand(p, 0), tab);
+      psl_check_number(psl_operand(p, 1), tab);
+      break;
+   }
+
+   case PSL_BUILTIN_NEXT:
+   case PSL_BUILTIN_STABLE:
+   case PSL_BUILTIN_ROSE:
+   case PSL_BUILTIN_FELL:
+   case PSL_BUILTIN_ENDED:
+   case PSL_BUILTIN_NONDET:
+   case PSL_BUILTIN_NONDET_VECTOR:
+      error_at(psl_loc(p), "sorry, this PSL built-in function is not yet supported");
+   }
+}
+
 void psl_check(psl_node_t p, nametab_t *tab)
 {
    switch (psl_kind(p)) {
@@ -508,6 +537,9 @@ void psl_check(psl_node_t p, nametab_t *tab)
       break;
    case P_CLOCKED:
       psl_check_clocked(p, tab, false);
+      break;
+   case P_BUILTIN_FUNC:
+      psl_check_builtin_func(p, tab);
       break;
    default:
       fatal_trace("cannot check PSL kind %s", psl_kind_str(psl_kind(p)));

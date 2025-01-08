@@ -11619,8 +11619,8 @@ static tree_t p_psl_builtin_function_call(void)
 
    BEGIN("PSL Built-in Function call");
 
-   token_t tok = one_of(tPSLNEXT, tPREV, tSTABLE, tROSE, tFELL, tENDED,
-                        tNONDET, tNONDETV);
+   token_t tok = one_of(tPSLNEXT, tPREV, tSTABLE, tROSE,
+                        tFELL, tENDED, tNONDET, tNONDETV);
 
    psl_node_t p = psl_new(P_BUILTIN_FUNC);
 
@@ -11628,8 +11628,21 @@ static tree_t p_psl_builtin_function_call(void)
    consume(tLPAREN);
 
    switch (tok) {
-   case tPSLNEXT:
    case tPREV:
+   {
+      psl_add_operand(p, p_psl_or_hdl_expression());
+
+      if (optional(tCOMMA))
+         psl_add_operand(p, p_psl_or_hdl_expression());
+
+      if (optional(tCOMMA))
+         psl_add_operand(p, p_psl_clock_expression());
+
+      psl_set_ref(p, find_default_clock(nametab));
+      break;
+   }
+
+   case tPSLNEXT:
    case tSTABLE:
    case tROSE:
    case tFELL:
@@ -11641,14 +11654,8 @@ static tree_t p_psl_builtin_function_call(void)
       if (tok == tPSLNEXT)
          break;
 
-      if (tok == tPREV && optional(tCOMMA)) {
-         psl_node_t p2 = p_psl_or_hdl_expression();
-         // TODO: Enforce numeric value on p2
-         psl_add_operand(p, p2);
-      }
-
       if (optional(tCOMMA))
-         (void)p_psl_clock_expression();
+         psl_add_operand(p, p_psl_clock_expression());
 
       break;
    }
@@ -11682,48 +11689,39 @@ static tree_t p_psl_builtin_function_call(void)
 
    // Determine function kind and return type
    unsigned kind = 0;
-   type_t rvt = type_new(T_NONE);
    switch (tok) {
-   case tPSLNEXT:
-      kind = PSL_BUILTIN_NEXT;
-      break;
    case tPREV:
       kind = PSL_BUILTIN_PREV;
       break;
+   case tPSLNEXT:
+      kind = PSL_BUILTIN_NEXT;
+      break;
    case tSTABLE:
       kind = PSL_BUILTIN_STABLE;
-      rvt = std_type(NULL, STD_BOOLEAN);
       break;
    case tROSE:
       kind = PSL_BUILTIN_ROSE;
-      rvt = std_type(NULL, STD_BOOLEAN);
       break;
    case tFELL:
       kind = PSL_BUILTIN_FELL;
-      rvt = std_type(NULL, STD_BOOLEAN);
       break;
    case tENDED:
       kind = PSL_BUILTIN_ENDED;
-      rvt = std_type(NULL, STD_BOOLEAN);
       break;
    case tNONDET:
       kind = PSL_BUILTIN_NONDET;
       break;
    case tNONDETV:
       kind = PSL_BUILTIN_NONDET_VECTOR;
-      rvt = std_type(NULL, STD_BIT_VECTOR);
       break;
    }
    psl_set_subkind(p, kind);
 
    tree_t t_psl = tree_new(T_PSL);
    tree_set_psl(t_psl, p);
+   tree_set_type(t_psl, type_new(T_NONE));
 
-   tree_t fcall = tree_new(T_FCALL);
-   tree_set_ref(fcall, t_psl);
-   tree_set_type(fcall, rvt);
-
-   return fcall;
+   return t_psl;
 }
 
 static psl_node_t p_psl_index_range(void)

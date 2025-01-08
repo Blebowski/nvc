@@ -24,6 +24,7 @@
 #include "psl/psl-fsm.h"
 #include "psl/psl-node.h"
 #include "psl/psl-phase.h"
+#include "psl/psl-utils.h"
 #include "tree.h"
 #include "type.h"
 #include "vcode.h"
@@ -430,4 +431,80 @@ void psl_lower_decl(unit_registry_t *ur, lower_unit_t *parent, psl_node_t p,
       fatal_at(psl_loc(p), "cannot lower PSL declaration kind %s",
                psl_kind_str(psl_kind(p)));
    }
+}
+
+static vcode_reg_t psl_lower_builtin_prev(unit_registry_t *ur, lower_unit_t *parent,
+                                          psl_node_t p)
+{
+   int64_t sr_len;
+   if (psl_operands(p) > 1) {
+      psl_node_t num = psl_operand(p, 1);
+      sr_len = get_psl_number(psl_tree(num));
+      sr_len += 1;
+   }
+   else
+      sr_len = 2;
+
+   vcode_state_t state;
+   vcode_state_save(&state);
+
+   tree_t expr = psl_tree(psl_operand(p, 0));
+   vcode_reg_t tmp = lower_rvalue(parent, expr);
+   vcode_type_t tmp_type = vcode_reg_type(tmp);
+
+   // Sample to the head of shift-register
+   vcode_var_t sr[sr_len];
+   for (int i = 0; i < sr_len; i++)
+      sr[i] = emit_var(tmp_type, VCODE_INVALID_TYPE,
+                       ident_prefix(ident_new("SR"), ident_new(xasprintf("%d", i)),'_'),
+                       0);
+
+   // Build shift register process
+   vcode_unit_t context = get_vcode(parent);
+   ident_t prefix = vcode_unit_name(context);
+   // TODO: handle unique name of new process
+   ident_t name = ident_prefix(prefix, ident_new("PREV"), '.');
+   vcode_unit_t vu = emit_process(name, psl_to_object(p), context);
+   lower_unit_t *lu = lower_unit_new(ur, parent, vu, NULL, NULL);
+   unit_registry_put(ur, lu);
+
+   vcode_block_t main_bb = emit_block();
+   emit_comment("Shift register");
+   vcode_select_block(main_bb);
+
+   psl_node_t clk = psl_ref(p);
+   build_wait(psl_tree(clk), psl_wait_cb, lu);
+
+   for (int i = sr_len - 1; i > 0; i--) {
+      vcode_reg_t tmp = emit_load(sr[i - 1]);
+      emit_store(tmp, sr[i]);
+   }
+   emit_store(sr[0], lower_rvalue(parent, psl_tree(psl_operand(p, 0))));
+
+   emit_return(VCODE_INVALID_REG);
+
+   vcode_state_restore(&state);
+
+   return emit_load(sr[sr_len - 1]);
+}
+
+vcode_reg_t psl_lower_builtin_fcall(unit_registry_t *ur, lower_unit_t *parent,
+                                    tree_t psl)
+{
+   assert (tree_has_psl(psl));
+
+   psl_node_t p = tree_psl(psl);
+   assert (psl_kind(p) == P_BUILTIN_FUNC);
+
+   psl_builtin_kind_t subkind =  psl_subkind(p);
+
+   switch (subkind) {
+   case PSL_BUILTIN_PREV:
+      return psl_lower_builtin_prev(ur, parent, p);
+      break;
+   default:
+      fatal_at(psl_loc(p), "cannot lower PSL builtin function kind %d", subkind);
+   }
+
+   return VCODE_INVALID_REG;
 }

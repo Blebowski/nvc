@@ -84,7 +84,7 @@ static const imask_t has_map[P_LAST_PSL_KIND] = {
    (I_PARAMS),
 
    // P_BUILTIN_FUNC
-   (I_SUBKIND | I_PARAMS),
+   (I_SUBKIND | I_PARAMS | I_REF),
 
    // P_VALUE_SET
    (I_SUBKIND | I_PARAMS),

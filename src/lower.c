@@ -5264,6 +5264,8 @@ static vcode_reg_t lower_expr(lower_unit_t *lu, tree_t expr, expr_ctx_t ctx)
       return VCODE_INVALID_REG;
    case T_COND_VALUE:
       return lower_cond_value(lu, expr);
+   case T_PSL:
+      return psl_lower_builtin_fcall(lu->registry, lu->parent, expr);
    default:
       fatal_at(tree_loc(expr), "cannot lower expression kind %s",
                tree_kind_str(tree_kind(expr)));

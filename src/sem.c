@@ -25,6 +25,7 @@
 #include "option.h"
 #include "phase.h"
 #include "type.h"
+#include "psl/psl-phase.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -7402,10 +7403,11 @@ bool sem_check(tree_t t, nametab_t *tab)
       return sem_check_implicit_signal(t, tab);
    case T_DISCONNECT:
       return sem_check_disconnect(t, tab);
+   case T_PSL:
+      psl_check(tree_psl(t), tab);
    case T_GROUP:
    case T_GROUP_TEMPLATE:
    case T_BOX:
-   case T_PSL:
    case T_LOOP:
    case T_SEQUENCE:
       return true;

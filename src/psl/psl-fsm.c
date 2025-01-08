@@ -27,6 +27,7 @@
 #include "psl/psl-fsm.h"
 #include "psl/psl-node.h"
 #include "psl/psl-phase.h"
+#include "psl/psl-utils.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -95,17 +96,6 @@ static void add_edge(psl_fsm_t *fsm, fsm_state_t *from, fsm_state_t *to,
    e->guard = guard;
 
    *p = e;
-}
-
-static int64_t get_number(tree_t t)
-{
-   int64_t result = 0;
-   if (!folded_int(t, &result))
-      error_at(tree_loc(t), "static value of PSL Number is not known");
-   else if (result < 0)
-      warn_at(tree_loc(t), "PSL Number %"PRIi64" is negative", result);
-
-   return result;
 }
 
 static psl_guard_t make_binop_guard(psl_fsm_t *fsm, binop_kind_t kind,
@@ -425,11 +415,11 @@ static void get_repeat_bounds(psl_node_t p, int *low, int *high, bool *infinite,
          psl_node_t count = psl_delay(p);
          switch (psl_kind(count)) {
          case P_RANGE:
-            *low = get_number(psl_tree(psl_left(count)));
-            *high = get_number(psl_tree(psl_right(count)));
+            *low = get_psl_number(psl_tree(psl_left(count)));
+            *high = get_psl_number(psl_tree(psl_right(count)));
             break;
          case P_HDL_EXPR:
-            *low = *high = get_number(psl_tree(count));
+            *low = *high = get_psl_number(psl_tree(count));
             break;
          default:
             should_not_reach_here();
@@ -515,7 +505,7 @@ static fsm_state_t *build_repeat(psl_fsm_t *fsm, fsm_state_t *state,
 static fsm_state_t *build_next(psl_fsm_t *fsm, fsm_state_t *state, psl_node_t p)
 {
    if (psl_has_delay(p)) {
-      const int cycles = get_number(psl_tree(psl_delay(p)));
+      const int cycles = get_psl_number(psl_tree(psl_delay(p)));
       for (int i = 0; i < cycles; i++) {
          fsm_state_t *new = add_state(fsm, p);
          add_edge(fsm, state, new, EDGE_NEXT, NULL);

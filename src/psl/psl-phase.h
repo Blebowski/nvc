@@ -19,6 +19,7 @@
 #define _PSL_PHASE_H
 
 #include "prim.h"
+#include "vcode.h"
 
 // Check PSL statements for errors.
 void psl_check(psl_node_t p, nametab_t *tab);
@@ -33,5 +34,9 @@ void psl_lower_directive(unit_registry_t *ur, lower_unit_t *parent,
 // Convert PSL declaration to vcode variable
 void psl_lower_decl(unit_registry_t *ur, lower_unit_t *parent, psl_node_t p,
                     ident_t name);
+
+// Convert PSL built-in function call to vcode variable
+vcode_reg_t psl_lower_builtin_fcall(unit_registry_t *ur, lower_unit_t *parent,
+                                    tree_t psl);
 
 #endif  // _PSL_PHASE_H
