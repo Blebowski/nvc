@@ -789,6 +789,17 @@ rt_signal_t *find_signal(rt_scope_t *scope, tree_t decl)
    return NULL;
 }
 
+rt_prop_t *find_property(rt_scope_t *scope, psl_node_t p)
+{
+   for (int i = 0; i < scope->properties.count; i++) {
+      rt_prop_t *tmp = scope->properties.items[i];
+      if (tmp->where = p)
+         return tmp;
+   }
+
+   return NULL;
+}
+
 rt_proc_t *find_proc(rt_scope_t *scope, tree_t proc)
 {
    for (int i = 0; i < scope->procs.count; i++) {
@@ -3648,6 +3659,12 @@ rt_watch_t *model_set_event_cb(rt_model_t *m, rt_signal_t *s, rt_watch_t *w)
       sched_event(m, n, &(w->wakeable));
 
    return w;
+}
+
+void model_set_prop_update_cb(rt_prop_t *p, rt_prop_cb_t cb, void *ctx)
+{
+   p->cb = cb;
+   p->cb_ctx = ctx;
 }
 
 static void handle_interrupt_cb(jit_t *j, void *ctx)

@@ -28,6 +28,7 @@
 #include "thread.h"
 
 typedef void *(*value_fn_t)(rt_nexus_t *);
+typedef void (*rt_prop_cb_t)(rt_prop_t *, void *ctx);
 
 typedef A(rt_scope_t *) scope_list_t;
 typedef A(rt_prop_t *) prop_list_t;
@@ -87,6 +88,8 @@ typedef struct _rt_prop {
    bit_mask_t     newstate;
    mptr_t         privdata;
    bool           strong;
+   rt_prop_cb_t   cb;
+   void          *cb_ctx;
 } rt_prop_t;
 
 typedef union {

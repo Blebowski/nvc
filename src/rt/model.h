@@ -47,6 +47,7 @@ void model_set_global_cb(rt_model_t *m, rt_event_t event, rt_event_fn_t fn,
 rt_watch_t *model_set_event_cb(rt_model_t *m, rt_signal_t *s, rt_watch_t *w);
 void model_set_timeout_cb(rt_model_t *m, uint64_t when, rt_event_fn_t fn,
                           void *user);
+void model_set_prop_update_cb(rt_prop_t *p, rt_prop_cb_t cb, void *ctx);
 
 rt_model_t *get_model(void);
 rt_model_t *get_model_or_null(void);
@@ -60,6 +61,7 @@ rt_scope_t *child_scope(rt_scope_t *scope, tree_t decl);
 rt_scope_t *child_scope_at(rt_scope_t *scope, int index);
 rt_signal_t *find_signal(rt_scope_t *scope, tree_t decl);
 rt_proc_t *find_proc(rt_scope_t *scope, tree_t proc);
+rt_prop_t *find_property(rt_scope_t *scope, psl_node_t p);
 bool is_signal_scope(rt_scope_t *scope);
 
 const void *signal_value(rt_signal_t *s);

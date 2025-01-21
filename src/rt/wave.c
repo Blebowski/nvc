@@ -114,6 +114,7 @@ typedef struct _wave_dumper {
    jit_t         *jit;
    hash_t        *typecache;
    data_array_t   dumped;
+   fst_type_t    *psl_type;
 } wave_dumper_t;
 
 static glob_array_t incl;
@@ -963,6 +964,26 @@ static void fst_leave_scope(wave_dumper_t *wd)
    }
 }
 
+static void fst_prop_upd_cb(rt_prop_t *t, void *ctx)
+{
+   fst_data_t *data = ctx;
+}
+
+static void fst_process_psl_directive(wave_dumper_t *wd, rt_scope_t *scope, tree_t t)
+{
+   assert (tree_kind(t) == T_PSL_DIRECT);
+
+   psl_node_t p = tree_psl(t);
+   rt_property_t *rt_prop = find_property(scope, p);
+
+   if (rt_prop == NULL)
+      return;
+
+   fst_data_t *data;
+
+   model_set_prop_update_cb(rt_prop, fst_prop_upd_cb, data);
+}
+
 static void fst_walk_design(wave_dumper_t *wd, tree_t block)
 {
    tree_t h = tree_decl(block, 0);
@@ -1009,6 +1030,13 @@ static void fst_walk_design(wave_dumper_t *wd, tree_t block)
    }
 
    const int nstmts = tree_stmts(block);
+
+   for (int i = 0; i < nstmts; i++) {
+      tree_t s = tree_stmt(block, i);
+      if (tree_kind(s) == T_PSL_DIRECT)
+         fst_process_psl_directive(wd, scope, s);
+   }
+
    for (int i = 0; i < nstmts; i++) {
       tree_t s = tree_stmt(block, i);
       switch (tree_kind(s)) {
@@ -1017,9 +1045,8 @@ static void fst_walk_design(wave_dumper_t *wd, tree_t block)
          break;
       case T_PROCESS:
       case T_VERILOG:
-         break;
       case T_PSL_DIRECT:
-         break;   // TODO: consider emitting to FST
+         break;
       default:
          fatal_trace("cannot handle tree kind %s in fst_walk_design",
                      tree_kind_str(tree_kind(s)));
@@ -1084,6 +1111,27 @@ void wave_dumper_restart(wave_dumper_t *wd, rt_model_t *m, jit_t *jit)
    model_set_global_cb(m, RT_END_OF_SIMULATION, fst_close, wd);
 }
 
+void fst_init_psl_type(wave_dumper_t *wd)
+{
+   fst_type_t *ft = xcalloc(sizeof(fst_type_t));
+
+   ft->vartype = FST_VT_GEN_STRING;
+   ft->size    = 0;
+   ft->fn      = fst_fmt_enum;
+
+   // inactive, running
+   ft->u.literals.count = 2;
+   ft->u.literals.size  = 8;
+
+   ft->u.literals.strings = xcalloc(18);
+   char *p = ft->u.literals.strings;
+   strncpy(p, "Inactive", 8);
+   p += 8;
+   strncpy(p, "Running", 8);
+
+   wd->psl_type = ft;
+}
+
 wave_dumper_t *wave_dumper_new(const char *file, const char *gtkw_file,
                                tree_t top, wave_format_t format)
 {
@@ -1115,6 +1163,8 @@ wave_dumper_t *wave_dumper_new(const char *file, const char *gtkw_file,
       wd->tmpfst  = NULL;
       wd->fst_ctx = fstWriterCreate(file, 1);
    }
+
+   fst_init_psl_type(wd);
 
    if (wd->fst_ctx == NULL)
       fatal("fstWriterCreate failed");
