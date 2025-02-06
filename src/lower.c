@@ -2900,6 +2900,7 @@ static vcode_reg_t lower_param_ref(lower_unit_t *lu, tree_t decl)
 {
    int hops = 0;
    int obj = lower_search_vcode_obj(decl, lu, &hops);
+   vcode_reg_t reg = obj;
 
    const bool is_proc_var = (obj != -1 && !!(obj & PARAM_VAR_BIT));
    obj &= ~PARAM_VAR_BIT;
@@ -2911,7 +2912,6 @@ static vcode_reg_t lower_param_ref(lower_unit_t *lu, tree_t decl)
    else if (is_proc_var)
       return emit_load(obj);
    else {
-      vcode_reg_t reg = obj;
       const bool undefined_in_thunk =
          lu->mode == LOWER_THUNK && (reg == VCODE_INVALID_REG
                                      || tree_class(decl) == C_SIGNAL
