@@ -144,6 +144,11 @@ static psl_guard_t not_guard(psl_guard_t g)
    return tag_pointer(p, p == NULL ? GUARD_FALSE : GUARD_NOT);
 }
 
+static psl_guard_t stub_guard(psl_guard_t g)
+{
+   return tag_pointer(g, GUARD_STUB);
+}
+
 static psl_guard_t build_else_guard(psl_fsm_t *fsm, fsm_state_t *state)
 {
    psl_guard_t g = NULL;
@@ -593,6 +598,15 @@ static fsm_state_t *build_suffix_impl(psl_fsm_t *fsm, fsm_state_t *state,
    return final;
 }
 
+static fsm_state_t *build_sequence_inst(psl_fsm_t *fsm, fsm_state_t *state,
+                                        psl_node_t p)
+{
+   fsm_state_t *new = add_state(fsm, p);
+   add_edge(fsm, state, new, EDGE_EPSILON, stub_guard(p));
+
+   return build_node(fsm, new, psl_value(psl_ref(p)));
+}
+
 static fsm_state_t *build_node(psl_fsm_t *fsm, fsm_state_t *state, psl_node_t p)
 {
    switch (psl_kind(p)) {
@@ -628,6 +642,8 @@ static fsm_state_t *build_node(psl_fsm_t *fsm, fsm_state_t *state, psl_node_t p)
       return build_suffix_impl(fsm, state, p);
    case P_CLOCKED:
       return build_node(fsm, state, psl_value(p));
+   case P_SEQUENCE_INST:
+      return build_sequence_inst(fsm, state, p);
    default:
       CANNOT_HANDLE(p);
    }
@@ -822,6 +838,7 @@ guard_kind_t psl_guard_kind(psl_guard_t g)
    case GUARD_BINOP:
    case GUARD_NOT:
    case GUARD_FALSE:
+   case GUARD_STUB:
       return tag;
    default:
       should_not_reach_here();
@@ -839,6 +856,7 @@ psl_node_t psl_guard_expr(psl_guard_t g)
    switch (pointer_tag(g)) {
    case GUARD_EXPR:
    case GUARD_NOT:
+   case GUARD_STUB:
       return untag_pointer(g, struct _psl_node);
    default:
       should_not_reach_here();
@@ -886,6 +904,10 @@ static void psl_dump_guard(psl_guard_t g, text_buf_t *tb, bool nested)
       break;
    case GUARD_FALSE:
       tb_cat(tb, "false");
+      break;
+   case GUARD_STUB:
+      psl_node_t p = psl_guard_expr(g);
+      psl_dump(p);
       break;
    default:
       should_not_reach_here();

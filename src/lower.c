@@ -3089,6 +3089,9 @@ static vcode_reg_t lower_ref(lower_unit_t *lu, tree_t ref, expr_ctx_t ctx)
    case T_PARAM_DECL:
       return lower_param_ref(lu, decl);
 
+   case T_PSL_PARAM_DECL:
+      return psl_lower_param_ref(lu, decl);
+
    case T_GENERIC_DECL:
       return lower_generic_ref(lu, decl, ctx);
 

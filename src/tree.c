@@ -385,7 +385,10 @@ static const imask_t has_map[T_LAST_TREE_KIND] = {
    (I_FOREIGN | I_TYPE),
 
    // T_PSL_UNION
-   (I_FOREIGN | I_TYPE)
+   (I_FOREIGN | I_TYPE),
+
+   // T_PSL_PARAM_DECL
+   (I_IDENT | I_TYPE | I_SUBKIND | I_CLASS),
 };
 
 static const char *kind_text_map[T_LAST_TREE_KIND] = {
@@ -428,7 +431,7 @@ static const char *kind_text_map[T_LAST_TREE_KIND] = {
    "T_MATCH_SELECT",    "T_PROT_DECL",       "T_DUMMY_DRIVER",
    "T_GUARD",           "T_INERTIAL",        "T_ELEM_RESOLUTION",
    "T_LOOP",            "T_REPORT",          "T_PSL_DIRECT",
-   "T_PSL_FCALL",       "T_PSL_UNION",
+   "T_PSL_FCALL",       "T_PSL_UNION",       "T_PSL_PARAM_DECL"
 };
 
 static const change_allowed_t change_allowed[] = {

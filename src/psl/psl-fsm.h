@@ -32,6 +32,7 @@ typedef enum {
    GUARD_BINOP = 0b01,
    GUARD_NOT = 0b10,
    GUARD_FALSE = 0b11,
+   GUARD_STUB = 0b100
 } guard_kind_t;
 
 typedef void *psl_guard_t;

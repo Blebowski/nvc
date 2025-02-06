@@ -4110,6 +4110,7 @@ static bool sem_check_ref(tree_t t, nametab_t *tab)
    case T_PROC_INST:
    case T_IMPLICIT_SIGNAL:
    case T_PARAM_DECL:
+   case T_PSL_PARAM_DECL:
       break;
 
    case T_CONST_DECL:

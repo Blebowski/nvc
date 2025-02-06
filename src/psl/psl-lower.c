@@ -85,6 +85,38 @@ static vcode_reg_t psl_assert_severity(void)
    return emit_const(vtype_int(0, 3), 2);
 }
 
+vcode_reg_t psl_lower_param_ref(lower_unit_t *lu, tree_t p)
+{
+   int hops;
+   int var = lower_search_vcode_obj(p, lu, &hops);
+   assert (var != VCODE_INVALID_VAR);
+
+   return emit_load(var);
+}
+
+static void psl_lower_seq_inst(lower_unit_t *lu, psl_node_t inst)
+{
+   psl_node_t decl = psl_ref(inst);
+
+   for (int i = 0; i < psl_operands(inst); i++) {
+      psl_node_t arg_val = psl_operand(inst, i);
+      tree_t arg_decl = psl_port(decl, i);
+
+      // TODO: Handle recursive sequence passed as argument
+      // TODO: WBU bit vectors ?
+      vcode_reg_t tmp = lower_rvalue(lu, psl_tree(arg_val));
+
+      type_t type = tree_type(arg_decl);
+      vcode_type_t vtype = lower_type(type);
+      vcode_type_t vbounds = lower_bounds(type);
+
+      vcode_var_t var = emit_var(vtype, vbounds, tree_ident(arg_decl), 0);
+      emit_store(tmp, var);
+
+      lower_put_vcode_obj(arg_decl, var, lu);
+   }
+}
+
 static vcode_reg_t psl_lower_guard(lower_unit_t *lu, psl_guard_t g)
 {
    switch (psl_guard_kind(g)) {
@@ -107,6 +139,11 @@ static vcode_reg_t psl_lower_guard(lower_unit_t *lu, psl_guard_t g)
       }
    case GUARD_NOT:
       return emit_not(psl_lower_boolean(lu, psl_guard_expr(g)));
+   case GUARD_STUB:
+      psl_node_t p = psl_guard_expr(g);
+      assert(psl_kind(p) == P_SEQUENCE_INST);
+      psl_lower_seq_inst(lu, p);
+      return emit_const(vtype_bool(), 1);
    default:
       should_not_reach_here();
    }
@@ -558,6 +595,9 @@ void psl_lower_decl(unit_registry_t *ur, lower_unit_t *parent, psl_node_t p,
    switch (psl_kind(p)) {
    case P_CLOCK_DECL:
       psl_lower_clock_decl(ur, parent, p, label);
+      break;
+   case P_SEQUENCE_DECL:
+      // Inlined in the directive where instantiated
       break;
    default:
       fatal_at(psl_loc(p), "cannot lower PSL declaration kind %s",
