@@ -12941,6 +12941,11 @@ static void lower_pack_body(lower_unit_t *lu, object_t *obj)
    const bool has_scope =
       lower_push_package_scope(pack) || lower_push_package_scope(body);
 
+   if (lu->cover != NULL) {
+      lu->cscope = cover_create_instance(lu->cover, NULL, body, body);
+      cover_ignore_from_pragmas(lu->cover, lu->cscope, pack);
+   }
+
    lower_decls(lu, pack);
    lower_decls(lu, body);
 
@@ -12969,6 +12974,11 @@ static void lower_package(lower_unit_t *lu, object_t *obj)
    lower_dependencies(lu, pack);
 
    const bool has_scope = lower_push_package_scope(pack);
+
+   if (lu->cover != NULL) {
+      lu->cscope = cover_create_instance(lu->cover, NULL, pack, pack);
+      cover_ignore_from_pragmas(lu->cover, lu->cscope, pack);
+   }
 
    lower_generics(lu, pack, NULL);
    lower_decls(lu, pack);
@@ -13303,6 +13313,7 @@ typedef bool (*dep_filter_fn_t)(ident_t, void *);
 typedef struct _unit_registry {
    hash_t *map;
    hset_t *visited;
+   cover_data_t *cover;
 } unit_registry_t;
 
 typedef struct {
@@ -13313,10 +13324,11 @@ typedef struct {
    cover_data_t *cover;
 } deferred_unit_t;
 
-unit_registry_t *unit_registry_new(void)
+unit_registry_t *unit_registry_new(cover_data_t *cover)
 {
    unit_registry_t *ur = xcalloc(sizeof(unit_registry_t));
    ur->map = hash_new(128);
+   ur->cover = cover;
 
    return ur;
 }
@@ -13497,11 +13509,11 @@ vcode_unit_t unit_registry_get(unit_registry_t *ur, ident_t ident)
             return NULL;
 
          unit_registry_defer(ur, unit_name, NULL, emit_package,
-                             lower_pack_body, NULL, tree_to_object(body));
+                             lower_pack_body, ur->cover, tree_to_object(body));
       }
       else
          unit_registry_defer(ur, unit_name, NULL, emit_package,
-                             lower_package, NULL, tree_to_object(unit));
+                             lower_package, ur->cover, tree_to_object(unit));
 
       if (unit_name != ident) {
          // We actually wanted a unit inside this package so need to

@@ -179,7 +179,8 @@ static void cover_apply_exclude_cmds(cover_data_t *data)
    for (int i = 0; i < data->ef->n_excl_cmds; i++)
       data->ef->excl[i].found = false;
 
-   cover_exclude_scope(data, data->root_scope);
+   for (int i = 0; i < data->n_scopes; i++)
+      cover_exclude_scope(data, data->root_scopes[i]);
 
    for (int i = 0; i < data->ef->n_excl_cmds; i++)
       if (!data->ef->excl[i].found)
@@ -271,7 +272,8 @@ static void cover_iterate_fold_target(cover_data_t *data, cover_scope_t *tgt_sco
       // into the target scope!
       if (curr_scp->hier == cmd->target) {
          cmd->found_target = true;
-         cover_iterate_fold_source(data, curr_scp, data->root_scope, cmd);
+         for (int j = 0; j < data->n_scopes; j++)
+            cover_iterate_fold_source(data, curr_scp, data->root_scopes[j], cmd);
       }
 
       cover_iterate_fold_target(data, curr_scp, cmd);
@@ -290,7 +292,8 @@ static void cover_apply_fold_cmds(cover_data_t *data)
       cmd->found_source = false;
       cmd->found_target = false;
 
-      cover_iterate_fold_target(data, data->root_scope, cmd);
+      for (int j = 0; j < data->n_scopes; j++)
+         cover_iterate_fold_target(data, data->root_scopes[j], cmd);
 
       if (cmd->found_target == false)
          warn_at(&(cmd->loc), "fold target does not match any "

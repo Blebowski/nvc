@@ -490,7 +490,7 @@ static void preload_do_link(const char *so_name, const char *obj_file)
 void aotgen(const char *outfile, char **argv, int argc)
 {
    unit_list_t units = AINIT;
-   unit_registry_t *ur = unit_registry_new();
+   unit_registry_t *ur = unit_registry_new(NULL);
 
    discover_args_t args = {
       .registry = ur,

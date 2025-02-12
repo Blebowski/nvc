@@ -210,7 +210,7 @@ void cover_export_cobertura(cover_data_t *data, FILE *f, const char *relative)
       .relative = relative ? realpath(relative, NULL) : NULL,
    };
 
-   cobertura_export_scope(&report, NULL, data->root_scope);
+   cobertura_export_scope(&report, NULL, data->root_scopes[0]);
 
    fprintf(f, "<?xml version='1.0' encoding='UTF-8'?>\n");
    fprintf(f, "<!DOCTYPE coverage SYSTEM "
@@ -245,7 +245,7 @@ void cover_export_cobertura(cover_data_t *data, FILE *f, const char *relative)
    fprintf(f, "<packages>\n");
    fprintf(f, "<package name=\"%s\" "
            "line-rate=\"%f\" branch-rate=\"%f\" complexity=\"0.0\">\n",
-           istr(data->root_scope->name), line_rate, branch_rate);
+           istr(data->root_scopes[0]->name), line_rate, branch_rate);
 
    fprintf(f, "<classes>\n");
    for (cobertura_class_t *it = report.classes; it; it = it->next)
@@ -327,5 +327,5 @@ static void dump_scope_xml(cover_scope_t *s, int indent, const loc_t *loc,
 void cover_export_xml(cover_data_t *data, FILE *f, const char *relative)
 {
    fprintf(f, "<?xml version=\"1.0\"?>\n");
-   dump_scope_xml(data->root_scope, 0, &LOC_INVALID, relative, f);
+   dump_scope_xml(data->root_scopes[0], 0, &LOC_INVALID, relative, f);
 }

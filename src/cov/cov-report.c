@@ -1456,16 +1456,20 @@ static void cover_report_hier_children(cover_rpt_hier_ctx_t *ctx,
 
 static void cover_report_per_hier(FILE *f, cover_data_t *data, char *subdir)
 {
-   for (int i = 0; i < data->root_scope->children.count; i++) {
-      cover_scope_t *child = AGET(data->root_scope->children, i);
-      cover_rpt_hier_ctx_t top_ctx = {};
+   for (int i = 0; i < data->n_scopes; i++) {
+      cover_scope_t *scope = data->root_scopes[i];
 
-      top_ctx.data = data;
+      for (int j = 0; j < scope->children.count; j++) {
+         cover_scope_t *child = AGET(scope->children, j);
+         cover_rpt_hier_ctx_t top_ctx = {};
 
-      cover_report_hier(&top_ctx, child, subdir);
-      char *rpt_link LOCAL = cover_get_report_name(istr(child->hier));
-      cover_print_summary_table_row(f, data, &(top_ctx.nested_stats), child->hier,
-                                    ident_new(rpt_link), top_ctx.lvl, true, true);
+         top_ctx.data = data;
+
+         cover_report_hier(&top_ctx, child, subdir);
+         char *rpt_link LOCAL = cover_get_report_name(istr(child->hier));
+         cover_print_summary_table_row(f, data, &(top_ctx.nested_stats), child->hier,
+                                       ident_new(rpt_link), top_ctx.lvl, true, true);
+      }
    }
 
    if (opt_get_int(OPT_VERBOSE)) {
@@ -1599,10 +1603,13 @@ static void cover_report_per_file(FILE *top_f, cover_data_t *data, char *subdir)
                                                   sizeof(cover_rpt_file_ctx_t));
 
    // Traverse hierarchy and merge all items into "per-file" lists
-   for (int i = 0; i < data->root_scope->children.count; i++) {
-      cover_scope_t *child = AGET(data->root_scope->children, i);
-      ctx_list = cover_rpt_file_collect_scope(data, ctx_list, child,
-                                              &n_ctxs, &alloc_ctxs);
+   for (int i = 0; i < data->n_scopes; i++) {
+      cover_scope_t *scope = data->root_scopes[i];
+      for (int j = 0; j < scope->children.count; j++) {
+         cover_scope_t *child = AGET(scope->children, j);
+         ctx_list = cover_rpt_file_collect_scope(data, ctx_list, child,
+                                                &n_ctxs, &alloc_ctxs);
+      }
    }
 
    // Convert to chains and print

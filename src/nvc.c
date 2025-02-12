@@ -254,7 +254,7 @@ static int analyse(int argc, char **argv, cmd_state_t *state)
    set_error_limit(error_limit);
 
    if (state->registry == NULL)
-      state->registry = unit_registry_new();
+      state->registry = unit_registry_new(NULL);
 
    lib_t work = lib_work();
    jit_t *jit = jit_new(state->registry);
@@ -514,7 +514,7 @@ static int elaborate(int argc, char **argv, cmd_state_t *state)
       state->jit = NULL;
    }
 
-   state->registry = unit_registry_new();
+   state->registry = unit_registry_new(cover);
    state->jit = get_jit(state->registry);
    state->model = model_new(state->jit, cover);
 
@@ -908,7 +908,7 @@ static int run_cmd(int argc, char **argv, cmd_state_t *state)
       warnf("recommended heap size is at least 1M");
 
    if (state->registry == NULL)
-      state->registry = unit_registry_new();
+      state->registry = unit_registry_new(NULL);
 
    if (state->jit == NULL)
       state->jit = get_jit(state->registry);

@@ -311,7 +311,7 @@ static cover_scope_t *find_cover_scope(cover_data_t *data, rt_model_t *m,
                                        rt_scope_t *inst)
 {
    if (inst->parent == NULL)
-      return data->root_scope;
+      return data->root_scopes[0];
 
    cover_scope_t *parent = find_cover_scope(data, m, inst->parent);
    if (parent == NULL)

@@ -61,7 +61,7 @@ static const struct {
 };
 
 #define COVER_FILE_MAGIC   0x6e636462   // ASCII "ncdb"
-#define COVER_FILE_VERSION 2
+#define COVER_FILE_VERSION 3
 
 static bool cover_is_branch(tree_t branch)
 {
@@ -841,10 +841,12 @@ void cover_dump_items(cover_data_t *data, fbuf_t *f, cover_dump_t dt,
                       const int32_t *counts)
 {
    if (dt == COV_DUMP_RUNTIME)
-      cover_update_counts(data->root_scope, counts);
+      for (int i = 0; i < data->n_scopes; i++)
+         cover_update_counts(data->root_scopes[i], counts);
 
    if (opt_get_int(OPT_COVER_VERBOSE))
-      cover_debug_dump(data->root_scope, 0);
+      for (int i = 0; i < data->n_scopes; i++)
+         cover_debug_dump(data->root_scopes[i], 0);
 
    write_u32(COVER_FILE_MAGIC, f);
    fbuf_put_uint(f, COVER_FILE_VERSION);
@@ -852,11 +854,13 @@ void cover_dump_items(cover_data_t *data, fbuf_t *f, cover_dump_t dt,
    fbuf_put_uint(f, data->mask);
    fbuf_put_uint(f, data->array_limit);
    fbuf_put_uint(f, data->next_tag);
+   fbuf_put_uint(f, data->n_scopes);
 
    loc_wr_ctx_t *loc_wr = loc_write_begin(f);
    ident_wr_ctx_t ident_ctx = ident_write_begin(f);
 
-   cover_write_scope(data->root_scope, f, ident_ctx, loc_wr);
+   for (int i = 0; i < data->n_scopes; i++)
+      cover_write_scope(data->root_scopes[i], f, ident_ctx, loc_wr);
 
    write_u8(CTRL_END_OF_FILE, f);
 
@@ -939,7 +943,7 @@ cover_scope_t *cover_create_scope(cover_data_t *data, cover_scope_t *parent,
       return NULL;
 
    assert(parent != NULL);
-   assert(data->root_scope != NULL);
+   assert(data->n_scopes > 0);
 
    cover_scope_t *s = xcalloc(sizeof(cover_scope_t));
    char prefix[16] = {0};
@@ -1001,15 +1005,21 @@ cover_scope_t *cover_create_instance(cover_data_t *data, cover_scope_t *parent,
    if (data == NULL)
       return NULL;
    else if (parent == NULL) {
-      assert(data->root_scope == NULL);
+      if (data->n_scopes == 0)
+         data->root_scopes = xcalloc(sizeof(cover_scope_t *));
+      else
+         data->root_scopes = xrealloc_array(data->root_scopes,
+                                            data->n_scopes + 1,
+                                            sizeof(cover_scope_t *));
 
-      parent = data->root_scope = xcalloc(sizeof(cover_scope_t));
+      parent = data->root_scopes[data->n_scopes] = xcalloc(sizeof(cover_scope_t));
+      data->n_scopes++;
       parent->name = parent->hier = lib_name(lib_work());
    }
 
    // TODO: do not emit scopes for components
-   assert(tree_kind(unit) == T_ARCH);
-   assert(tree_kind(block) == T_BLOCK);
+   //assert(tree_kind(unit) == T_ARCH || tree_kind(unit) == T_PACKAGE || tree_kind(unit) == T_PACK_BODY);
+   //assert(tree_kind(block) == T_BLOCK);
 
    cover_scope_t *s = xcalloc(sizeof(cover_scope_t));
    s->name       = tree_ident(block);
@@ -1042,6 +1052,7 @@ static void cover_read_header(fbuf_t *f, cover_data_t *data)
    data->mask        = fbuf_get_uint(f);
    data->array_limit = fbuf_get_uint(f);
    data->next_tag    = fbuf_get_uint(f);
+   data->n_scopes    = fbuf_get_uint(f);
 }
 
 static void cover_read_one_item(fbuf_t *f, loc_rd_ctx_t *loc_rd,
@@ -1125,12 +1136,15 @@ cover_data_t *cover_read_items(fbuf_t *f, uint32_t pre_mask)
    loc_rd_ctx_t *loc_rd = loc_read_begin(f);
    ident_rd_ctx_t ident_ctx = ident_read_begin(f);
 
+   data->root_scopes = xcalloc_array(data->n_scopes, sizeof(cover_scope_t*));
+
    bool eof = false;
    do {
       const uint8_t ctrl = read_u8(f);
       switch (ctrl) {
       case CTRL_PUSH_SCOPE:
-         data->root_scope = cover_read_scope(f, ident_ctx, loc_rd);
+         for (int i = 0; i < data->n_scopes; i++)
+            data->root_scopes[i] = cover_read_scope(f, ident_ctx, loc_rd);
          break;
       case CTRL_END_OF_FILE:
          eof = true;
@@ -1216,13 +1230,17 @@ void cover_merge_items(fbuf_t *f, cover_data_t *data)
    ident_rd_ctx_t ident_ctx = ident_read_begin(f);
 
    bool eof = false;
+   int curr_scope = 0;
    do {
       const uint8_t ctrl = read_u8(f);
       switch (ctrl) {
       case CTRL_PUSH_SCOPE:
          {
+            // TODO: Check this iwll work when merging disjunct DBS
+            // Likely some matching will be needed
             cover_scope_t *new = cover_read_scope(f, ident_ctx, loc_rd);
-            cover_merge_scope(data->root_scope, new);
+            cover_merge_scope(data->root_scopes[curr_scope], new);
+            curr_scope++;
          }
          break;
       case CTRL_END_OF_FILE:
