@@ -1370,7 +1370,10 @@ static void cover_print_hier_nav_tree(FILE *f, cover_scope_t *s)
 static void cover_report_hier(cover_rpt_hier_ctx_t *ctx,
                               cover_scope_t *s, const char *dir)
 {
+   notef("cover_report_hier, hier: %s\n", istr(s->hier));
+
    char *rpt_name LOCAL = cover_get_report_name(istr(s->hier));
+   notef("  A: %s\n", istr(s->hier));
    char *hier LOCAL = xasprintf("%s/%s.html", dir, rpt_name);
 
    FILE *f = fopen(hier, "w");
@@ -1386,9 +1389,11 @@ static void cover_report_hier(cover_rpt_hier_ctx_t *ctx,
 
    cover_print_html_header(f);
    cover_print_hier_nav_tree(f, s);
+   notef("  B: %s\n", istr(s->hier));
    cover_print_inst_name(f, s);
 
    cover_file_t *src = cover_file_for_scope(s);
+   notef("  C: %s\n", istr(s->hier));
    const char *filename = (src) ? src->name : "";
    cover_print_file_name(f, filename);
 
@@ -1424,7 +1429,12 @@ static void cover_report_hier_children(cover_rpt_hier_ctx_t *ctx,
                                        cover_scope_t *s, const char *dir,
                                        FILE *summf, int *skipped)
 {
+   notef("cover_report_hier_children, hier: %s\n", istr(s->hier));
+   notef("cover_report_hier_children, n-children: %d\n", s->children.count);
+
    for (int i = 0; i < s->children.count; i++) {
+      notef("cover_report_hier_children, i: %d\n", i);
+
       cover_scope_t *it = s->children.items[i];
       if (it->type == CSCOPE_INSTANCE) {
          // Collect coverage of sub-block
@@ -1461,7 +1471,11 @@ static void cover_report_hier_children(cover_rpt_hier_ctx_t *ctx,
 
 static void cover_report_per_hier(FILE *f, cover_data_t *data, char *subdir)
 {
+   notef("cover_report_per_hier, children count: %d\n", data->root_scope->children.count);
+
    for (int i = 0; i < data->root_scope->children.count; i++) {
+      notef("cover_report_per_hier, children i: %d\n", i);
+
       cover_scope_t *child = AGET(data->root_scope->children, i);
       cover_rpt_hier_ctx_t top_ctx = {};
 

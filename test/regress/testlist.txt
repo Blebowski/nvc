@@ -1,3 +1,4 @@
+cover26         shell
 wait1           normal
 assert1         gold,fail
 assign1         normal
@@ -1094,7 +1095,6 @@ tcl3            tcl,fail,gold
 psl18           fail,gold,2008
 psl19           gold,psl
 psl20           gold,psl
-cover26         shell
 debug4          normal,gold
 issue1150       normal,psl
 order4          shell

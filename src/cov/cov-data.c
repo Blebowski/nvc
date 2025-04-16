@@ -935,6 +935,9 @@ static bool cover_should_emit_scope(cover_data_t *data, cover_scope_t *cs,
 cover_scope_t *cover_create_scope(cover_data_t *data, cover_scope_t *parent,
                                   tree_t t, ident_t name)
 {
+   notef("cover_create_scope: %s\n", istr(name));
+   notef("  kind: %s\n\n", tree_kind_str(tree_kind(t)));
+
    if (data == NULL)
       return NULL;
 
@@ -997,6 +1000,9 @@ cover_scope_t *cover_create_scope(cover_data_t *data, cover_scope_t *parent,
 cover_scope_t *cover_create_instance(cover_data_t *data, cover_scope_t *parent,
                                      tree_t block, tree_t unit)
 {
+   notef("cover_create_instance:\n");
+   notef("  block: %s  kind: %s\n", istr(tree_ident(block)), tree_kind_str(tree_kind(block)) );
+   notef("  unit: %s   kind: %s\n\n",  istr(tree_ident(unit)), tree_kind_str(tree_kind(unit)) );
 
    if (data == NULL)
       return NULL;
