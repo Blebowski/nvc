@@ -157,6 +157,7 @@ typedef enum {
    V_CLASS_DECL,
    V_NULL,
    V_CLASS_NEW,
+   V_INTERFACE,
 
    V_LAST_NODE_KIND
 } vlog_kind_t;

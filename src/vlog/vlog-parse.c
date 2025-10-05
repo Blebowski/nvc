@@ -5907,7 +5907,7 @@ static void p_parameter_port_declaration(vlog_node_t mod)
    }
 }
 
-static void p_parameter_port_list(vlog_node_t mod)
+static void p_parameter_port_list(vlog_node_t parent)
 {
    // # ( list_of_param_assignments { , parameter_port_declaration } )
    //    | # ( parameter_port_declaration { , parameter_port_declaration } )
@@ -5921,9 +5921,9 @@ static void p_parameter_port_list(vlog_node_t mod)
    if (peek() != tRPAREN) {
       do {
          if (peek() == tID)
-            p_list_of_param_assignments(mod, NULL, V_PARAM_DECL);
+            p_list_of_param_assignments(parent, NULL, V_PARAM_DECL);
          else
-            p_parameter_port_declaration(mod);
+            p_parameter_port_declaration(parent);
       } while(optional(tCOMMA));
    }
 
@@ -5981,7 +5981,7 @@ static vlog_node_t p_port(void)
    return p_port_expression();
 }
 
-static void p_list_of_ports(vlog_node_t mod)
+static void p_list_of_ports(vlog_node_t parent)
 {
    // ( port { , port } )
 
@@ -5990,7 +5990,7 @@ static void p_list_of_ports(vlog_node_t mod)
    consume(tLPAREN);
 
    do {
-      vlog_add_port(mod, p_port());
+      vlog_add_port(parent, p_port());
    } while (optional(tCOMMA));
 
    consume(tRPAREN);
@@ -6684,7 +6684,7 @@ static vlog_node_t p_package_declaration(void)
 
 static vlog_node_t p_program_nonansi_header(void)
 {
-   // { attribute_instance } program [ lifetime ] program_identifier
+   // { attribute_instance } program [ lifetime ] program_identifierf
    //    { package_import_declaration } [ parameter_port_list ] list_of_ports ;
 
    BEGIN("program non-ANSI header");
@@ -6764,6 +6764,43 @@ static vlog_node_t p_program_declaration(void)
    return v;
 }
 
+static void p_list_of_interface_items(vlog_node_t itf)
+{
+   BEGIN("list of interface items");
+
+   while (scan(tINOUT, tINPUT, tOUTPUT)) {
+      p_port_declaration(itf);
+      consume(tSEMI);
+   }
+
+}
+
+static vlog_node_t p_interface_declaration(void)
+{
+   BEGIN("interface declaration");
+
+   consume(tINTERFACE);
+
+   vlog_node_t v = vlog_new(V_INTERFACE);
+   vlog_set_ident(v, p_identifier());
+
+   if (peek() == tHASH)
+      p_parameter_port_list(v);
+
+   // TODO: Add ANSI variant
+   p_list_of_ports(v);
+
+   p_list_of_interface_items(v);
+
+   consume(tENDINTERFACE);
+
+   if (optional(tCOMMA)) {
+      ident_t ident = p_identifier();
+   }
+
+   return v;
+}
+
 static vlog_node_t p_description(void)
 {
    // module_declaration | udp_declaration | interface_declaration
@@ -6785,6 +6822,8 @@ static vlog_node_t p_description(void)
       return p_package_declaration();
    case tPROGRAM:
       return p_program_declaration();
+   case tINTERFACE:
+      return p_interface_declaration();
    default:
       expect(tPRIMITIVE, tMODULE, tPACKAGE, tPROGRAM);
       return NULL;

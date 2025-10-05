@@ -840,6 +840,8 @@ PROTECT           ?i:protect
 <VLOG>"program"          { return KEYWORD_2005(tPROGRAM); }
 <VLOG>"endprogram"       { return KEYWORD_2005(tENDPROGRAM); }
 <VLOG>"endclass"         { return KEYWORD_2005(tENDCLASS); }
+<VLOG>"interface"        { return KEYWORD_2005(tINTERFACE); }
+<VLOG>"endinterface"     { return KEYWORD_2005(tENDINTERFACE); }
 
 <VLOG>"`unconnected_drive"   { return tUNCTDRIVE; }
 <VLOG>"`nounconnected_drive" { return tNOUNCTDRIVE; }
