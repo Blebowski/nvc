@@ -80,7 +80,7 @@ typedef void (*add_func_t)(tree_t, tree_t);
 static tree_t p_expression(void);
 static tree_t p_expression_with_head(tree_t head);
 static tree_t p_sequential_statement(void);
-static tree_t p_concurrent_statement(void);
+static tree_t p_concurrent_or_simultaneous_statement(void);
 static tree_t p_package_declaration(tree_t unit);
 static tree_t p_package_body(tree_t unit);
 static tree_t p_subprogram_declaration(tree_t spec);
@@ -113,6 +113,19 @@ static void p_variable_declaration(tree_t parent);
 static void p_array_constraint(type_t type, type_t base);
 static void p_psl_declaration(tree_t parent);
 static psl_node_t p_psl_sequence(void);
+static type_t p_subnature_indication(void);
+static void p_nature_declaration(tree_t parent);
+static void p_subnature_declaration(tree_t parent);
+static void p_terminal_declaration(tree_t parent);
+static void p_quantity_declaration(tree_t parent);
+static tree_t p_break_statement(ident_t label);
+static tree_t p_concurrent_break_statement(ident_t label);
+static tree_t p_simultaneous_procedural_statement(ident_t label);
+static tree_t p_simple_simultaneous_statement(ident_t label, tree_t lhs);
+static tree_t p_simultaneous_if_statement(ident_t label, tree_t first_cond);
+static tree_t p_simultaneous_case_statement(ident_t label, tree_t first_expr);
+static void p_simultaneous_statement(void);
+static void p_simultaneous_statement_part(void);
 static psl_node_t p_psl_property(void);
 static psl_node_t p_psl_sere(void);
 static tree_t p_psl_directive(ident_t label);
@@ -5902,9 +5915,45 @@ static void p_interface_declaration(tree_t parent, tree_kind_t kind,
          p_interface_constant_declaration(parent, kind, ordered);
       break;
 
+   case tQUANTITY:
+      {
+         // interface_quantity_declaration ::=
+         //   quantity identifier_list : [ in | out ] subtype_indication
+         //   [ := expression ]
+         consume(tQUANTITY);
+         LOCAL_IDENT_LIST ids = p_identifier_list();
+         (void)ids;
+         consume(tCOLON);
+         if (peek() == tIN || peek() == tOUT)
+            consume(peek());
+         type_t type = p_subtype_indication();
+         (void)type;
+         if (optional(tWALRUS))
+            p_expression();
+         // TODO: for each id create T_PORT_DECL with class C_QUANTITY
+         //       where C_QUANTITY is a new class kind to be added to tree.h
+      }
+      break;
+
+   case tTERMINAL:
+      {
+         // interface_terminal_declaration ::=
+         //   terminal identifier_list : subnature_indication
+         consume(tTERMINAL);
+         LOCAL_IDENT_LIST ids = p_identifier_list();
+         (void)ids;
+         consume(tCOLON);
+         type_t nature = p_subnature_indication();
+         (void)nature;
+         // TODO: for each id create T_PORT_DECL with class C_TERMINAL
+         //       where C_TERMINAL is a new class kind to be added to tree.h
+      }
+      break;
+
    default:
       expect(tCONSTANT, tSIGNAL, tVARIABLE, tFILE, tID, tTYPE,
-             STD(08, tFUNCTION), tPROCEDURE, tPURE, tIMPURE, tPACKAGE);
+             STD(08, tFUNCTION), tPROCEDURE, tPURE, tIMPURE, tPACKAGE,
+             tQUANTITY, tTERMINAL);
    }
 }
 
@@ -6775,6 +6824,178 @@ static type_t p_full_type_declaration(tree_t tdecl)
    return t;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// VHDL-AMS (IEEE 1076.1-1999) parser functions
+
+static tree_t p_tolerance_aspect(void)
+{
+   // tolerance_aspect ::= tolerance expression
+
+   BEGIN("tolerance aspect");
+
+   consume(tTOLERANCE);
+   return p_expression();
+}
+
+static type_t p_subnature_indication(void)
+{
+   // subnature_indication ::=
+   //   nature_mark [ tolerance_aspect ] [ across tolerance_aspect through ]
+
+   BEGIN("subnature indication");
+
+   // TODO: type.h needs a T_NATURE type kind to represent nature marks;
+   //       p_type_mark is used as a placeholder until then
+   type_t nature = p_type_mark(NULL);
+
+   if (optional(tTOLERANCE))
+      p_expression();
+
+   if (optional(tACROSS)) {
+      consume(tTOLERANCE);
+      p_expression();
+      consume(tTHROUGH);
+   }
+
+   return nature;
+}
+
+static void p_nature_element_declaration(void)
+{
+   // nature_element_declaration ::=
+   //   identifier_list : element_subnature_definition ;
+   //
+   // element_subnature_definition ::= subnature_indication
+
+   BEGIN("nature element declaration");
+
+   LOCAL_IDENT_LIST ids = p_identifier_list();
+   (void)ids;
+
+   consume(tCOLON);
+   p_subnature_indication();
+   consume(tSEMI);
+
+   // TODO: tree.h needs T_NATURE_DECL with an element list field to attach
+   //       parsed element declarations to the enclosing nature declaration
+}
+
+static void p_nature_definition(void)
+{
+   // nature_definition ::=
+   //   scalar_nature_definition | composite_nature_definition
+   //
+   // scalar_nature_definition ::=
+   //   type_mark across type_mark through identifier reference
+   //
+   // composite_nature_definition ::=
+   //   array_nature_definition | record_nature_definition
+   //
+   // array_nature_definition ::=
+   //   array ( index_subtype_definition { , index_subtype_definition } )
+   //     of subnature_indication
+   //   | array index_constraint of subnature_indication
+   //
+   // record_nature_definition ::=
+   //   record
+   //     nature_element_declaration { nature_element_declaration }
+   //   end record [ nature_simple_name ]
+
+   // TODO: tree.h needs T_NATURE_DECL tree kind to hold the parsed definition
+
+   BEGIN("nature definition");
+
+   switch (peek()) {
+   case tARRAY:
+      consume(tARRAY);
+      consume(tLPAREN);
+      if (peek_nth(2) == tRANGE) {
+         do {
+            p_index_subtype_definition(NULL);
+         } while (optional(tCOMMA));
+      }
+      else {
+         do {
+            p_discrete_range(NULL);
+         } while (optional(tCOMMA));
+      }
+      consume(tRPAREN);
+      consume(tOF);
+      p_subnature_indication();
+      break;
+
+   case tRECORD:
+      consume(tRECORD);
+      while (not_at_token(tEND))
+         p_nature_element_declaration();
+      consume(tEND);
+      consume(tRECORD);
+      if (peek() == tID)
+         p_identifier();
+      break;
+
+   default:
+      // scalar_nature_definition: type_mark across type_mark through id reference
+      p_type_mark(NULL);
+      consume(tACROSS);
+      p_type_mark(NULL);
+      consume(tTHROUGH);
+      p_identifier();
+      consume(tREFERENCE);
+      break;
+   }
+}
+
+static void p_nature_declaration(tree_t parent)
+{
+   // nature_declaration ::= nature identifier is nature_definition ;
+
+   BEGIN("nature declaration");
+
+   consume(tNATURE);
+
+   ident_t id = p_identifier();
+   hide_name(nametab, id);
+
+   consume(tIS);
+
+   // TODO: tree_t t = tree_new(T_NATURE_DECL); tree_set_ident(t, id);
+   //       where T_NATURE_DECL is a new tree kind to be added to tree.h
+
+   p_nature_definition();
+
+   consume(tSEMI);
+
+   // TODO: tree_set_loc(t, CURRENT_LOC); insert_name(nametab, t, id);
+   //       tree_add_decl(parent, t);
+}
+
+static void p_subnature_declaration(tree_t parent)
+{
+   // subnature_declaration ::= subnature identifier is subnature_indication ;
+
+   BEGIN("subnature declaration");
+
+   consume(tSUBNATURE);
+
+   ident_t id = p_identifier();
+   hide_name(nametab, id);
+
+   consume(tIS);
+
+   type_t nature = p_subnature_indication();
+   (void)nature;
+
+   consume(tSEMI);
+
+   // TODO: tree_t t = tree_new(T_SUBNATURE_DECL); tree_set_ident(t, id);
+   //       tree_set_type(t, nature); tree_set_loc(t, CURRENT_LOC);
+   //       insert_name(nametab, t, id); tree_add_decl(parent, t);
+   //       where T_SUBNATURE_DECL is a new tree kind to be added to tree.h
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 static type_t p_incomplete_type_declaration(ident_t id)
 {
    // type identifier ;
@@ -7429,6 +7650,155 @@ static void p_signal_declaration(tree_t parent)
 
       insert_name(nametab, t, it->ident);
       sem_check(t, nametab);
+   }
+}
+
+static void p_terminal_declaration(tree_t parent)
+{
+   // terminal_declaration ::= terminal identifier_list : subnature_indication ;
+
+   BEGIN("terminal declaration");
+
+   consume(tTERMINAL);
+
+   LOCAL_IDENT_LIST ids = p_identifier_list();
+   (void)ids;
+
+   consume(tCOLON);
+
+   type_t nature = p_subnature_indication();
+   (void)nature;
+
+   consume(tSEMI);
+
+   // TODO: for each id: tree_t t = tree_new(T_TERMINAL_DECL);
+   //       tree_set_ident(t, it->ident); tree_set_type(t, nature);
+   //       tree_set_loc(t, &(it->loc)); insert_name(nametab, t, it->ident);
+   //       tree_add_decl(parent, t);
+   //       where T_TERMINAL_DECL is a new tree kind to be added to tree.h
+}
+
+static bool p_quantity_is_branch(void)
+{
+   // After consuming 'quantity', determine whether this is a branch quantity
+   // declaration (no ':' before 'across', 'through', or ';') versus a free
+   // or source quantity declaration (identifier_list ':' subtype_indication).
+   for (int n = 1; n < TOKENQ_SIZE; n++) {
+      const token_t t = peek_nth(n);
+      if (t == tCOLON) return false;
+      if (t == tACROSS || t == tTHROUGH || t == tSEMI || t == tEOF)
+         return true;
+   }
+   return false;
+}
+
+static void p_quantity_declaration(tree_t parent)
+{
+   // quantity_declaration ::=
+   //   free_quantity_declaration
+   //   | branch_quantity_declaration
+   //   | source_quantity_declaration
+   //
+   // free_quantity_declaration ::=
+   //   quantity identifier_list : subtype_indication [ := expression ] ;
+   //
+   // branch_quantity_declaration ::=
+   //   quantity [ across_aspect ] [ through_aspect ] terminal_aspect ;
+   //
+   //   across_aspect  ::= identifier_list [ tolerance_aspect ] [ := expression ] across
+   //   through_aspect ::= identifier_list [ tolerance_aspect ] [ := expression ] through
+   //   terminal_aspect ::= terminal_name [ to terminal_name ]
+   //
+   // source_quantity_declaration ::=
+   //   quantity identifier_list : subtype_indication source_aspect ;
+   //
+   //   source_aspect ::=
+   //     spectrum magnitude_simple_expression , phase_simple_expression
+   //     | noise power_simple_expression
+
+   BEGIN("quantity declaration");
+
+   consume(tQUANTITY);
+
+   if (p_quantity_is_branch()) {
+      // branch_quantity_declaration
+      if (peek() != tID) {
+         // Only terminal_aspect present (no across or through aspect)
+         p_name(0);
+         if (optional(tTO))
+            p_name(0);
+      }
+      else {
+         // Parse optional across_aspect and/or through_aspect then terminal_aspect
+         if (scan(tACROSS, tTHROUGH, tSEMI)) {
+            LOCAL_IDENT_LIST ids = p_identifier_list();
+            (void)ids;
+            if (optional(tTOLERANCE))
+               p_expression();
+            if (optional(tWALRUS))
+               p_expression();
+            if (peek() == tACROSS) {
+               consume(tACROSS);
+               if (peek() == tID || peek() == tLPAREN) {
+                  LOCAL_IDENT_LIST tids = p_identifier_list();
+                  (void)tids;
+                  if (optional(tTOLERANCE))
+                     p_expression();
+                  if (optional(tWALRUS))
+                     p_expression();
+               }
+               consume(tTHROUGH);
+            }
+            else
+               consume(tTHROUGH);
+         }
+         // terminal_aspect
+         p_name(0);
+         if (optional(tTO))
+            p_name(0);
+      }
+
+      consume(tSEMI);
+
+      // TODO: tree_t t = tree_new(T_BRANCH_QUANTITY_DECL);
+      //       where T_BRANCH_QUANTITY_DECL is a new tree kind to be added to tree.h
+   }
+   else {
+      // free_quantity_declaration or source_quantity_declaration
+      LOCAL_IDENT_LIST ids = p_identifier_list();
+      (void)ids;
+
+      consume(tCOLON);
+
+      type_t type = p_subtype_indication();
+      (void)type;
+
+      if (peek() == tSPECTRUM) {
+         // source_quantity_declaration: spectrum mag , phase
+         consume(tSPECTRUM);
+         p_expression();
+         consume(tCOMMA);
+         p_expression();
+      }
+      else if (peek() == tNOISE) {
+         // source_quantity_declaration: noise power
+         consume(tNOISE);
+         p_expression();
+      }
+      else if (optional(tWALRUS)) {
+         // free_quantity_declaration: optional initial value
+         p_expression();
+      }
+
+      consume(tSEMI);
+
+      // TODO: for each id: tree_t t = tree_new(T_FREE_QUANTITY_DECL) or
+      //       tree_new(T_SOURCE_QUANTITY_DECL) depending on source_aspect;
+      //       tree_set_ident(t, it->ident); tree_set_type(t, type);
+      //       tree_set_loc(t, &(it->loc)); insert_name(nametab, t, it->ident);
+      //       tree_add_decl(parent, t);
+      //       where T_FREE_QUANTITY_DECL and T_SOURCE_QUANTITY_DECL are new
+      //       tree kinds to be added to tree.h
    }
 }
 
@@ -8224,10 +8594,27 @@ static void p_entity_declarative_item(tree_t entity)
       tree_add_decl(entity, p_mode_view_declaration());
       break;
 
+   case tNATURE:
+      p_nature_declaration(entity);
+      break;
+
+   case tSUBNATURE:
+      p_subnature_declaration(entity);
+      break;
+
+   case tTERMINAL:
+      p_terminal_declaration(entity);
+      break;
+
+   case tQUANTITY:
+      p_quantity_declaration(entity);
+      break;
+
    default:
       expect(tATTRIBUTE, tTYPE, tSUBTYPE, tCONSTANT, tFUNCTION, tPROCEDURE,
              tIMPURE, tPURE, tALIAS, tUSE, tDISCONNECT, tGROUP, tSHARED,
-             tSIGNAL, STD(08, tPACKAGE), STD(19, tVIEW));
+             tSIGNAL, STD(08, tPACKAGE), STD(19, tVIEW),
+             tNATURE, tSUBNATURE, tTERMINAL, tQUANTITY);
    }
 }
 
@@ -8851,10 +9238,27 @@ static void p_package_declarative_item(tree_t pack)
       tree_add_decl(pack, p_mode_view_declaration());
       break;
 
+   case tNATURE:
+      p_nature_declaration(pack);
+      break;
+
+   case tSUBNATURE:
+      p_subnature_declaration(pack);
+      break;
+
+   case tTERMINAL:
+      p_terminal_declaration(pack);
+      break;
+
+   case tQUANTITY:
+      p_quantity_declaration(pack);
+      break;
+
    default:
       expect(tTYPE, tFUNCTION, tPROCEDURE, tIMPURE, tPURE, tSUBTYPE, tSIGNAL,
              tATTRIBUTE, tCONSTANT, tCOMPONENT, tFILE, tSHARED, tALIAS, tUSE,
-             tDISCONNECT, tGROUP, tPACKAGE, STD(19, tVIEW));
+             tDISCONNECT, tGROUP, tPACKAGE, STD(19, tVIEW),
+             tNATURE, tSUBNATURE, tTERMINAL, tQUANTITY);
    }
 }
 
@@ -9648,10 +10052,27 @@ static void p_block_declarative_item(tree_t parent)
       tree_add_decl(parent, p_mode_view_declaration());
       break;
 
+   case tNATURE:
+      p_nature_declaration(parent);
+      break;
+
+   case tSUBNATURE:
+      p_subnature_declaration(parent);
+      break;
+
+   case tTERMINAL:
+      p_terminal_declaration(parent);
+      break;
+
+   case tQUANTITY:
+      p_quantity_declaration(parent);
+      break;
+
    default:
       expect(tSIGNAL, tTYPE, tSUBTYPE, tFILE, tCONSTANT, tFUNCTION, tIMPURE,
              tPURE, tPROCEDURE, tALIAS, tATTRIBUTE, tFOR, tCOMPONENT, tUSE,
-             tSHARED, tDISCONNECT, tGROUP, STD(08, tPACKAGE), STD(19, tVIEW));
+             tSHARED, tDISCONNECT, tGROUP, STD(08, tPACKAGE), STD(19, tVIEW),
+             tNATURE, tSUBNATURE, tTERMINAL, tQUANTITY);
    }
 }
 
@@ -10563,6 +10984,49 @@ static tree_t p_sequential_block_statement(ident_t label)
    return t;
 }
 
+static tree_t p_break_statement(ident_t label)
+{
+   // break_statement ::=
+   //   [ label : ] break [ break_list ] [ when condition ] ;
+   //
+   // break_list ::= break_element { , break_element }
+   //
+   // break_element ::=
+   //   [ break_selector_clause ] quantity_name => expression
+   //
+   // break_selector_clause ::= for quantity_name use
+
+   EXTEND("break statement");
+
+   consume(tBREAK);
+
+   // Optional break_list: one or more break_elements separated by commas.
+   // Each element optionally begins with 'for quantity_name use'.
+   if (peek() != tWHEN && peek() != tSEMI) {
+      do {
+         if (optional(tFOR)) {
+            p_name(0);   // quantity_name in break_selector_clause
+            consume(tUSE);
+         }
+         p_name(0);          // quantity_name
+         consume(tASSOC);    // =>
+         p_expression();
+      } while (optional(tCOMMA));
+   }
+
+   tree_t condition = NULL;
+   if (optional(tWHEN))
+      condition = p_condition();
+   (void)condition;
+
+   consume(tSEMI);
+
+   // TODO: tree_t t = tree_new(T_BREAK); set_label_and_loc(t, label, CURRENT_LOC);
+   //       attach break_list elements and optional condition to t;
+   //       where T_BREAK is a new tree kind to be added to tree.h
+   return NULL;
+}
+
 static tree_t p_sequential_statement(void)
 {
    // wait_statement | assertion_statement | report_statement
@@ -10615,6 +11079,9 @@ static tree_t p_sequential_statement(void)
    case tWITH:
       return p_variable_assignment_statement(label, NULL);
 
+   case tBREAK:
+      return p_break_statement(label);
+
    case tID:
    case tLTLT:
       break;
@@ -10641,7 +11108,8 @@ static tree_t p_sequential_statement(void)
 
    default:
       expect(tWAIT, tID, tASSERT, tREPORT, tIF, tNULL, tRETURN, tCASE, tWHILE,
-             tFOR, tLOOP, tEXIT, tNEXT, tWITH, tLTLT, tLPAREN, tBLOCK);
+             tFOR, tLOOP, tEXIT, tNEXT, tWITH, tLTLT, tLPAREN, tBLOCK,
+             tBREAK);
       drop_tokens_until(&state, tSEMI);
       return tree_new(T_NULL);
    }
@@ -11054,7 +11522,7 @@ static void p_concurrent_statement_or_psl(tree_t parent)
          tree_add_stmt(parent, p_psl_directive(NULL));
    }
    else
-      tree_add_stmt(parent, p_concurrent_statement());
+      tree_add_stmt(parent, p_concurrent_or_simultaneous_statement());
 }
 
 static void p_block_statement_part(tree_t arch)
@@ -11422,6 +11890,115 @@ static tree_t p_generate_statement(ident_t label)
       drop_tokens_until(&state, tSEMI);
       return ensure_labelled(tree_new(T_BLOCK), label);
    }
+}
+
+static tree_t p_if_generate_or_simultaneous_if_statement(ident_t label)
+{
+   // if_generate_statement ::=
+   //    if [ alternative_label : ] condition generate generate_statement_body
+   //      { elsif [ alternative_label : ] condition generate
+   //        generate_statement_body }
+   //      [ else [ alternative_label : ] generate generate_statement_body ]
+   //      end generate [ generate_label ] ;
+
+   EXTEND("if generate statement or simultanous if statement");
+
+   consume(tIF);
+
+   tree_t g = tree_new(T_IF_GENERATE);
+   tree_set_ident(g, label);
+
+   if (label != NULL)
+      insert_name(nametab, g, NULL);
+
+   ident_t alt_label = NULL;
+   if (peek() == tID && peek_nth(2) == tCOLON) {
+      require_std(STD_08, "alternative labels");
+
+      alt_label = p_identifier();
+      consume(tCOLON);
+   }
+
+   push_scope(nametab);
+   scope_set_container(nametab, g);
+   scope_set_prefix(nametab, alt_label ?: label);
+
+   tree_t c0 = tree_new(T_COND_STMT);
+   tree_set_ident(c0, alt_label ?: label);
+   tree_set_value(c0, p_condition());
+
+   tree_add_cond(g, c0);
+
+   consume(tGENERATE);
+
+   p_generate_statement_body(c0, alt_label);
+
+   pop_scope(nametab);
+
+   tree_set_loc(c0, CURRENT_LOC);
+
+   while (optional(tELSIF)) {
+      require_std(STD_08, "elsif in generate statements");
+
+      ident_t alt_label = NULL;
+      if (peek() == tID && peek_nth(2) == tCOLON) {
+         alt_label = p_identifier();
+         consume(tCOLON);
+      }
+
+      push_scope(nametab);
+      scope_set_prefix(nametab, alt_label ?: label);
+
+      tree_t c = tree_new(T_COND_STMT);
+      tree_set_ident(c, alt_label ?: label);
+      tree_set_value(c, p_condition());
+
+      consume(tGENERATE);
+
+      p_generate_statement_body(c, alt_label);
+
+      pop_scope(nametab);
+
+      tree_set_loc(c, CURRENT_LOC);
+      tree_add_cond(g, c);
+   }
+
+   if (optional(tELSE)) {
+      require_std(STD_08, "else in generate statements");
+
+      ident_t alt_label = label;
+      if (peek() == tID && peek_nth(2) == tCOLON) {
+         alt_label = p_identifier();
+         consume(tCOLON);
+      }
+
+      push_scope(nametab);
+      scope_set_prefix(nametab, alt_label ?: label);
+
+      tree_t c = tree_new(T_COND_STMT);
+      tree_set_ident(c, alt_label ?: label);
+
+      consume(tGENERATE);
+
+      p_generate_statement_body(c, alt_label);
+
+      pop_scope(nametab);
+
+      tree_set_loc(c, CURRENT_LOC);
+      tree_add_cond(g, c);
+   }
+
+   consume(tEND);
+   consume(tGENERATE);
+   p_trailing_label(label);
+   consume(tSEMI);
+
+   if (label == NULL)
+      parse_error(CURRENT_LOC, "generate statement must have a label");
+
+   tree_set_loc(g, CURRENT_LOC);
+   sem_check(g, nametab);
+   return g;
 }
 
 static psl_node_t p_psl_low_bound(tree_t head)
@@ -13182,15 +13759,274 @@ static tree_t p_psl_or_concurrent_assert(ident_t label)
    return conc;
 }
 
-static tree_t p_concurrent_statement(void)
+static tree_t p_simple_simultaneous_statement(ident_t label, tree_t lhs)
 {
-   // block_statement | process_statement | concurrent_procedure_call_statement
-   //   | concurrent_assertion_statement
-   //   | concurrent_signal_assignment_statement
-   //   | component_instantiation_statement | generate_statement
-   //   | 2008: psl_directive
+   // simple_simultaneous_statement ::=
+   //   [ label : ] simple_expression == simple_expression [ tolerance_aspect ] ;
 
-   BEGIN("concurrent statement");
+   EXTEND("simple simultaneous statement");
+
+   consume(tLOGEQ);
+
+   tree_t rhs = p_expression();
+   (void)rhs;
+
+   if (peek() == tTOLERANCE)
+      p_tolerance_aspect();
+
+   consume(tSEMI);
+
+   // TODO: tree_t t = tree_new(T_SIMULTANEOUS_STMT);
+   //       tree_set_ident(t, label); tree_set_left(t, lhs); tree_set_right(t, rhs);
+   //       tree_set_loc(t, CURRENT_LOC);
+   //       where T_SIMULTANEOUS_STMT is a new tree kind to be added to tree.h
+   return NULL;
+}
+
+static tree_t p_simultaneous_if_statement(ident_t label)
+{
+   // simultaneous_if_statement ::=
+   //   [ label : ] IF condition USE
+   //     simultaneous_statement_part
+   //   { ELSIF condition USE
+   //     simultaneous_statement_part }
+   //   [ ELSE
+   //     simultaneous_statement_part ]
+   //   END USE [ label ] ;
+
+   EXTEND("simultaneous if statement");
+
+   consume(tIF);
+
+   // TODO: tree_t t = tree_new(T_SIMULTANEOUS_IF);
+   //       tree_set_ident(t, label);
+   //       where T_SIMULTANEOUS_IF is a new tree kind to be added to tree.h
+
+   p_condition();
+   consume(tUSE);
+   p_simultaneous_statement_part();
+
+   while (optional(tELSIF)) {
+      p_condition();
+      consume(tUSE);
+      p_simultaneous_statement_part();
+   }
+
+   if (optional(tELSE))
+      p_simultaneous_statement_part();
+
+   consume(tEND);
+   consume(tUSE);
+   p_trailing_label(label);
+   consume(tSEMI);
+
+   // TODO: tree_set_loc(t, CURRENT_LOC); sem_check(t, nametab); return t;
+   return NULL;
+}
+
+static tree_t p_simultaneous_case_statement(ident_t label)
+{
+   // simultaneous_case_statement ::=
+   //   [ label : ] CASE expression USE
+   //     simultaneous_alternative { simultaneous_alternative }
+   //   END USE [ label ] ;
+   //
+   // simultaneous_alternative ::=
+   //   WHEN choices => simultaneous_statement_part
+
+   EXTEND("simultaneous case statement");
+
+   consume(tCASE);
+
+   // TODO: tree_t t = tree_new(T_SIMULTANEOUS_CASE);
+   //       tree_set_ident(t, label);
+   //       where T_SIMULTANEOUS_CASE is a new tree kind to be added to tree.h
+
+   p_expression();
+   consume(tUSE);
+
+   do {
+      consume(tWHEN);
+      tree_t alt = tree_new(T_ALTERNATIVE);
+      p_choices(alt, NULL, NULL);
+      consume(tASSOC);
+      p_simultaneous_statement_part();
+   } while (peek() == tWHEN);
+
+   consume(tEND);
+   consume(tUSE);
+   p_trailing_label(label);
+   consume(tSEMI);
+
+   // TODO: tree_set_loc(t, CURRENT_LOC); sem_check(t, nametab); return t;
+   return NULL;
+}
+
+static void p_simultaneous_statement(void)
+{
+   // simultaneous_statement ::=
+   //   simple_simultaneous_statement | simultaneous_if_statement
+   //   | simultaneous_case_statement | simultaneous_null_statement
+
+   BEGIN("simultaneous statement");
+
+   ident_t stmtlabel = NULL;
+   if (peek() == tID && peek_nth(2) == tCOLON) {
+      stmtlabel = p_identifier();
+      consume(tCOLON);
+   }
+
+   switch (peek()) {
+   case tIF:
+      p_simultaneous_if_statement(stmtlabel);
+      break;
+   case tCASE:
+      p_simultaneous_case_statement(stmtlabel);
+      break;
+   case tNULL:
+      consume(tNULL);
+      consume(tSEMI);
+      break;
+   default:
+      {
+         tree_t lhs = p_expression();
+         p_simple_simultaneous_statement(stmtlabel, lhs);
+      }
+      break;
+   }
+}
+
+static void p_simultaneous_statement_part(void)
+{
+   // simultaneous_statement_part ::= { simultaneous_statement }
+
+   while (not_at_token(tELSIF, tELSE, tEND, tWHEN))
+      p_simultaneous_statement();
+}
+
+static tree_t p_concurrent_break_statement(ident_t label)
+{
+   // concurrent_break_statement ::=
+   //   [ label : ] break [ break_list ] [ sensitivity_clause ] [ when condition ] ;
+   //
+   // break_list ::= break_element { , break_element }
+   //
+   // break_element ::=
+   //   [ break_selector_clause ] quantity_name => expression
+   //
+   // break_selector_clause ::= for quantity_name use
+
+   EXTEND("concurrent break statement");
+
+   consume(tBREAK);
+
+   if (peek() != tON && peek() != tWHEN && peek() != tSEMI) {
+      do {
+         if (optional(tFOR)) {
+            p_name(0);   // quantity_name in break_selector_clause
+            consume(tUSE);
+         }
+         p_name(0);          // quantity_name
+         consume(tASSOC);    // =>
+         p_expression();
+      } while (optional(tCOMMA));
+   }
+
+   if (peek() == tON)
+      p_sensitivity_clause(NULL);   // sensitivity_clause
+
+   tree_t condition = NULL;
+   if (optional(tWHEN))
+      condition = p_condition();
+   (void)condition;
+
+   consume(tSEMI);
+
+   // TODO: tree_t t = tree_new(T_CONCURRENT_BREAK);
+   //       set_label_and_loc(t, label, CURRENT_LOC);
+   //       attach break_list elements, sensitivity list, and condition to t;
+   //       sem_check(t, nametab);
+   //       where T_CONCURRENT_BREAK is a new tree kind to be added to tree.h
+   return NULL;
+}
+
+static void p_procedural_declarative_part(tree_t proc)
+{
+   // procedural_declarative_part ::= { procedural_declarative_item }
+   //
+   // procedural_declarative_item ::=
+   //   subprogram_declaration | subprogram_body | type_declaration
+   //   | subtype_declaration | constant_declaration | variable_declaration
+   //   | alias_declaration | attribute_declaration | attribute_specification
+   //   | use_clause
+
+   BEGIN("procedural declarative part");
+
+   while (not_at_token(tBEGIN))
+      p_process_declarative_item(proc);
+}
+
+static tree_t p_simultaneous_procedural_statement(ident_t label)
+{
+   // procedural_statement ::=
+   //   [ label : ] procedural [ is ]
+   //     procedural_declarative_part
+   //   begin
+   //     procedural_statement_part
+   //   end [ procedural ] [ label ] ;
+   //
+   // procedural_statement_part ::= { sequential_statement }
+
+   EXTEND("procedural statement");
+
+   consume(tPROCEDURAL);
+   optional(tIS);
+
+   if (label == NULL)
+      label = get_implicit_label(NULL, nametab);
+
+   // TODO: tree_t t = tree_new(T_PROCEDURAL);
+   //       tree_set_ident(t, label); insert_name(nametab, t, label);
+   //       push_scope(nametab); scope_set_container(nametab, t);
+   //       where T_PROCEDURAL is a new tree kind to be added to tree.h
+
+   push_scope(nametab);
+
+   p_procedural_declarative_part(NULL);
+
+   consume(tBEGIN);
+
+   p_sequence_of_statements(NULL);
+
+   consume(tEND);
+   optional(tPROCEDURAL);
+   p_trailing_label(label);
+   consume(tSEMI);
+
+   pop_scope(nametab);
+
+   // TODO: tree_set_loc(t, CURRENT_LOC); sem_check(t, nametab); return t;
+   return NULL;
+}
+
+static tree_t p_concurrent_or_simultaneous_statement(void)
+{
+   // concurrent_statement ::=
+      // block_statement | process_statement |
+      //   | concurrent_procedure_call_statement
+      //   | concurrent_assertion_statement
+      //   | concurrent_signal_assignment_statement
+      //   | component_instantiation_statement | generate_statement
+      //   | 2008: psl_directive
+   //
+   // simultaneous_statement ::=
+   //    simple_simultaneous_statement
+   //      | simultaneous_if_statement
+   //      | simultaneous_case_statement
+   //      | simultaneous_procedural_statement
+   //      | simultaneous_null_statement
+
+   BEGIN("concurrent or simultaneous statement");
 
    ident_t label = NULL;
    if ((peek() == tID) && (peek_nth(2) == tCOLON)) {
@@ -13222,8 +14058,10 @@ static tree_t p_concurrent_statement(void)
    case tBLOCK:
       return p_block_statement(label);
 
-   case tIF:
    case tFOR:
+      return p_for_generate_statement(label);
+
+   case tIF:
    case tCASE:
       return p_generate_statement(label);
 
@@ -13240,8 +14078,14 @@ static tree_t p_concurrent_statement(void)
             tree_t name = p_name(N_SUBPROGRAM), conc;
             if (peek() == tLE)
                return p_concurrent_signal_assignment_statement(label, name);
+            else if (opt_get_int(OPT_AMS) && peek() == tLOGEQ)
+               return p_simple_simultaneous_statement(label, name);
             else if (scan(tGENERIC, tPORT))
                return p_component_instantiation_statement(label, name);
+            else if (opt_get_int(OPT_AMS) && scan(tPLUS, tMINUS, tAMP)) {
+               tree_t lhs = p_expression_with_head(name);
+               return p_simple_simultaneous_statement(label, lhs);
+            }
             else {
                switch (tree_kind(name)) {
                case T_REF:
@@ -13289,10 +14133,17 @@ static tree_t p_concurrent_statement(void)
          else
             return p_process_statement(label);
       }
+
+   case tBREAK:
+      return p_concurrent_break_statement(label);
+
+   case tPROCEDURAL:
+      return p_simultaneous_procedural_statement(label);
+
    default:
       expect(tPROCESS, tPOSTPONED, tCOMPONENT, tENTITY, tCONFIGURATION,
              tWITH, tASSERT, tBLOCK, tIF, tFOR, tCASE, tLPAREN, tID,
-             STD(08, tLTLT));
+             STD(08, tLTLT), tBREAK, tPROCEDURAL);
       drop_tokens_until(&state, tSEMI);
       return ensure_labelled(tree_new(T_BLOCK), label);
    }

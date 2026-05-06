@@ -77,6 +77,17 @@
 #define TOKEN_08(t) TOKEN_LRM(t, STD_08)
 #define TOKEN_19(t) TOKEN_LRM(t, STD_19)
 
+#define TOKEN_AMS(t) do {                                                     \
+      static bool warned = false;                                             \
+      if (opt_get_int(OPT_AMS))                                               \
+         return (last_token = (t));                                           \
+      if (t == tID && !warned) {                                              \
+         warnf("%s is a reserved word in VHDL-AMS (IEEE 1076.1-1999)",        \
+              istr(yylval.ident));                                            \
+         warned = true;                                                       \
+      }                                                                       \
+   } while (0);                                                               \
+
 #define KEYWORD_2001(t) verilog_keyword(t, VLOG_1364_2001);
 #define KEYWORD_2005(t) verilog_keyword(t, VLOG_1800_2005);
 
@@ -297,6 +308,20 @@ NONDET_V      ?i:nondet_vector
 UNION         ?i:union
 INF           ?i:inf
 ENDPOINT      ?i:endpoint
+
+ACROSS        ?i:across
+BREAK         ?i:break
+LIMIT         ?i:limit
+NATURE        ?i:nature
+NOISE         ?i:noise
+PROCEDURAL    ?i:procedural
+QUANTITY      ?i:quantity
+REFERENCE     ?i:reference
+SPECTRUM      ?i:spectrum
+SUBNATURE     ?i:subnature
+TERMINAL      ?i:terminal
+THROUGH       ?i:through
+TOLERANCE     ?i:tolerance
 
 INTERCONNECT      ?i:interconnect
 DELAYFILE         ?i:delayfile
@@ -521,6 +546,21 @@ PROTECT           ?i:protect
 {COVER}                  { TOKEN_08(tCOVER); }
 {VIEW}                   { TOKEN_19(tVIEW); }
 {PRIVATE}                { TOKEN_19(tPRIVATE); }
+
+{ACROSS}                 { TOKEN_AMS(tACROSS); }
+{BREAK}                  { TOKEN_AMS(tBREAK); }
+{LIMIT}                  { TOKEN_AMS(tLIMIT); }
+{NATURE}                 { TOKEN_AMS(tNATURE); }
+{NOISE}                  { TOKEN_AMS(tNOISE); }
+{PROCEDURAL}             { TOKEN_AMS(tPROCEDURAL); }
+{QUANTITY}               { TOKEN_AMS(tQUANTITY); }
+{REFERENCE}              { TOKEN_AMS(tREFERENCE); }
+{SPECTRUM}               { TOKEN_AMS(tSPECTRUM); }
+{SUBNATURE}              { TOKEN_AMS(tSUBNATURE); }
+{TERMINAL}               { TOKEN_AMS(tTERMINAL); }
+{THROUGH}                { TOKEN_AMS(tTHROUGH); }
+{TOLERANCE}              { TOKEN_AMS(tTOLERANCE); }
+"=="                     { TOKEN_AMS(tLOGEQ); }
 
 `{IF}                    { TOKEN(tCONDIF); }
 `{ELSE}                  { TOKEN(tCONDELSE); }

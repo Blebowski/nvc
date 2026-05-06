@@ -2517,6 +2517,7 @@ int main(int argc, char **argv)
       { "version",       no_argument,       0, 'v' },
       { "work",          required_argument, 0, 'w' },
       { "std",           required_argument, 0, 's' },
+      { "ams",           no_argument,       0, 'a' },
       { "messages",      required_argument, 0, 'I' },
       { "map",           required_argument, 0, 'p' },
       { "ieee-warnings", required_argument, 0, 'W' },
@@ -2600,6 +2601,9 @@ int main(int argc, char **argv)
          break;
       case 'S':
          opt_set_int(OPT_RANDOM_SEED, parse_int(optarg));
+         break;
+      case 'a':
+         opt_set_int(OPT_AMS, 1);
          break;
       case '?':
          bad_option("global", argv);

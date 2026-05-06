@@ -464,6 +464,15 @@ const char *token_str(token_t tok)
 
       if (tok >= 200 && tok - 200 < ARRAY_LEN(token_strs))
          return token_strs[tok - 200];
+
+      static const char *ams_token_strs[] = {
+         "across", "break", "limit", "nature", "noise", "procedural",
+         "quantity", "reference", "spectrum", "subnature", "terminal",
+         "through", "tolerance",
+      };
+
+      if (tok >= tACROSS && tok - tACROSS < ARRAY_LEN(ams_token_strs))
+         return ams_token_strs[tok - tACROSS];
    }
 
    return "???";

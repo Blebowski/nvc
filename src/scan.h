@@ -584,4 +584,19 @@ void reset_sdf_parser(void);
 #define tCOMMENT       640
 #define tDLRPERIOD     641
 
+// TODO: Append beyond the tokens.
+#define tACROSS        800
+#define tBREAK         801
+#define tLIMIT         802
+#define tNATURE        803
+#define tNOISE         804
+#define tPROCEDURAL    805
+#define tQUANTITY      806
+#define tREFERENCE     807
+#define tSPECTRUM      808
+#define tSUBNATURE     809
+#define tTERMINAL      810
+#define tTHROUGH       811
+#define tTOLERANCE     812
+
 #endif  // _SCAN_H
