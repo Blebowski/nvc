@@ -110,7 +110,7 @@ static const imask_t has_map[V_LAST_NODE_KIND] = {
    (I_STMTS),
 
    // V_SPECIFY
-   (I_DECLS),
+   (I_DECLS | I_STMTS),
 
    // V_PRIMITIVE
    (I_IDENT | I_IDENT2 | I_PORTS | I_DECLS | I_STMTS),
@@ -312,6 +312,12 @@ static const imask_t has_map[V_LAST_NODE_KIND] = {
 
    // V_PORT_MAP
    (I_REF | I_VALUE),
+
+   // V_SPECIFY_PATH
+   (I_SUBKIND | I_ASSOCS | I_VALUE | I_LEFT | I_RIGHT),
+
+   // V_SPECIFY_REF
+   (I_SUBKIND | I_PORTS)
 };
 
 static const char *kind_text_map[V_LAST_NODE_KIND] = {
@@ -339,6 +345,7 @@ static const char *kind_text_map[V_LAST_NODE_KIND] = {
    "V_PACKAGE",       "V_MIN_TYP_MAX", "V_PROGRAM",       "V_CLASS_DECL",
    "V_NULL",          "V_CLASS_NEW",   "V_CONSTRUCTOR",   "V_SUPER_CALL",
    "V_IMPORT_DECL",   "V_NAMESPACE",   "V_DEFPARAM",      "V_PORT_MAP",
+   "V_SPECIFY_PATH",  "V_SPECIFY_REF"
 };
 
 static const change_allowed_t change_allowed[] = {
@@ -714,6 +721,25 @@ vlog_flags_t vlog_flags(vlog_node_t t)
 void vlog_set_flags(vlog_node_t v, vlog_flags_t mask)
 {
    lookup_item(&vlog_object, v, I_FLAGS)->ival |= mask;
+}
+
+unsigned vlog_assocs(vlog_node_t v)
+{
+   item_t *item = lookup_item(&vlog_object, v, I_ASSOCS);
+   return obj_array_count(item->obj_array);
+}
+
+vlog_node_t vlog_assoc(vlog_node_t v, unsigned n)
+{
+   item_t *item = lookup_item(&vlog_object, v, I_ASSOCS);
+   return vlog_array_nth(item, n);
+}
+
+void vlog_add_assoc(vlog_node_t v, vlog_node_t s)
+{
+   assert(s != NULL);
+   vlog_array_add(lookup_item(&vlog_object, v, I_ASSOCS), s);
+   object_write_barrier(&(v->object), &(s->object));
 }
 
 void vlog_visit(vlog_node_t v, vlog_visit_fn_t fn, void *context)

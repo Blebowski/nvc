@@ -163,6 +163,8 @@ typedef enum {
    V_NAMESPACE,
    V_DEFPARAM,
    V_PORT_MAP,
+   V_SPECIFY_PATH,
+   V_SPECIFY_REF,
 
    V_LAST_NODE_KIND
 } vlog_kind_t;
@@ -298,6 +300,17 @@ typedef enum {
 } vlog_udp_symbol_t;
 
 typedef enum {
+   V_SPECIFY_PATH_FULL,
+   V_SPECIFY_PATH_PARALLEL
+} vlog_specify_path_kind_t;
+
+typedef enum {
+   V_POLARITY_POS,
+   V_POLARITY_NEG,
+   V_POLARITY_ANY
+} vlog_polarity_kind_t;
+
+typedef enum {
    VLOG_F_SIGNED = (1 << 0),
 } vlog_flags_t;
 
@@ -393,6 +406,10 @@ void vlog_set_ival(vlog_node_t v, int64_t i);
 
 vlog_flags_t vlog_flags(vlog_node_t t);
 void vlog_set_flags(vlog_node_t v, vlog_flags_t mask);
+
+unsigned vlog_assocs(vlog_node_t v);
+vlog_node_t vlog_assoc(vlog_node_t v, unsigned n);
+void vlog_add_assoc(vlog_node_t v, vlog_node_t s);
 
 typedef void (*vlog_visit_fn_t)(vlog_node_t v, void *context);
 
