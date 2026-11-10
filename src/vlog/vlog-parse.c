@@ -6358,14 +6358,17 @@ static vlog_node_t p_controlled_timing_check_event(void)
 
    BEGIN("controlled timing check event");
 
-   p_timing_check_event_control();
+   vlog_node_t v = vlog_new(V_TCHECK_EVENT);
 
-   (void)p_specify_terminal_descriptor();
+   vlog_node_t v_e = p_timing_check_event_control();
+   vlog_set_value(v_e, p_specify_terminal_descriptor());
+   vlog_set_loc(v_e, CURRENT_LOC);
+   vlog_add_param(v, v_e);
 
    if (optional(tTRPLAMP))
-      p_timing_check_condition();
+      vlog_add_param(v, p_timing_check_condition());
 
-   return NULL;
+   return v;
 }
 
 static vlog_node_t p_setup_or_hold_timing_check(void)
@@ -6468,15 +6471,17 @@ static vlog_node_t p_width_timing_check(void)
    consume(tDLRWIDTH);
    consume(tLPAREN);
 
-   (void)p_controlled_timing_check_event();
+   vlog_node_t v = vlog_new(V_TCHECK);
+   vlog_set_subkind(v, V_TCHECK_WIDTH);
+   vlog_add_param(v, p_controlled_timing_check_event());
 
    consume(tCOMMA);
 
-   (void)p_expression();
+   vlog_add_param(v, p_expression());
 
    consume(tCOMMA);
 
-   (void)p_constant_expression();
+   vlog_add_param(v, p_constant_expression());
 
    if (optional(tCOMMA)) {
       if (peek() == tID)
@@ -6486,7 +6491,7 @@ static vlog_node_t p_width_timing_check(void)
    consume(tRPAREN);
    consume(tSEMI);
 
-   return NULL;
+   return v;
 }
 
 static vlog_node_t p_delayed_data_or_reference(void)
@@ -6511,11 +6516,13 @@ static vlog_node_t p_period_timing_check(void)
    consume(tDLRPERIOD);
    consume(tLPAREN);
 
-   (void)p_controlled_timing_check_event();
+   vlog_node_t v = vlog_new(V_TCHECK);
+   vlog_set_subkind(v, V_TCHECK_PERIOD);
+   vlog_add_param(v, p_controlled_timing_check_event());
 
    consume(tCOMMA);
 
-   (void)p_expression();
+   vlog_add_param(v, p_expression());
 
    if (optional(tCOMMA)) {
       if (peek() == tID)
@@ -6525,7 +6532,7 @@ static vlog_node_t p_period_timing_check(void)
    consume(tRPAREN);
    consume(tSEMI);
 
-   return NULL;
+   return v;
 }
 
 static vlog_node_t p_setuphold_or_recrem_timing_check(void)

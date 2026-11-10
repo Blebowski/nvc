@@ -107,6 +107,7 @@ static mir_value_t vlog_lower_rvalue(vlog_gen_t *g, vlog_node_t v);
 static mir_value_t vlog_lower_with_context(vlog_gen_t *g, vlog_node_t v,
                                            mir_type_t context);
 static void vlog_lower_deferred(mir_unit_t *mu, object_t *obj);
+static mir_value_t vlog_lower_trigger(vlog_gen_t *g, vlog_node_t v);
 
 static const type_info_t *vlog_type_info(vlog_gen_t *g, vlog_node_t v)
 {
@@ -2128,6 +2129,61 @@ static void vlog_lower_negedge_fn(mir_unit_t *mu, object_t *obj)
    vlog_lower_edge_fn(mu, NEGEDGE);
 }
 
+static mir_value_t vlog_lower_event_trigger(vlog_gen_t *g, vlog_node_t v,
+                                            bool invert_edge)
+{
+   v_event_kind_t kind = vlog_subkind(v);
+
+   if (kind == V_EVENT_LEVEL)
+      return vlog_lower_trigger(g, vlog_value(v));
+
+   vlog_select_t lvalue = vlog_lower_select(g, vlog_value(v));
+
+   if (invert_edge) {
+      if (kind == V_EVENT_POSEDGE)
+         kind = V_EVENT_NEGEDGE;
+      else if (kind == V_EVENT_NEGEDGE)
+         kind = V_EVENT_POSEDGE;
+   }
+
+   ident_t func = NULL, func_opposite = NULL;
+   switch (kind) {
+   case V_EVENT_POSEDGE:
+      func = ident_new("@posedge");
+      mir_defer(mir_get_context(g->mu), func, NULL, MIR_UNIT_FUNCTION,
+                  vlog_lower_posedge_fn, NULL);
+      break;
+   case V_EVENT_NEGEDGE:
+      func = ident_new("@negedge");
+      mir_defer(mir_get_context(g->mu), func, NULL, MIR_UNIT_FUNCTION,
+                  vlog_lower_negedge_fn, NULL);
+      break;
+   case V_EVENT_EDGE:
+      func = ident_new("@posedge");
+      func_opposite = ident_new("@negedge");
+      mir_defer(mir_get_context(g->mu), func, NULL, MIR_UNIT_FUNCTION,
+                  vlog_lower_posedge_fn, NULL);
+      mir_defer(mir_get_context(g->mu), func, NULL, MIR_UNIT_FUNCTION,
+                  vlog_lower_negedge_fn, NULL);
+      break;
+   default:
+      should_not_reach_here();
+   }
+
+   mir_type_t t_context = mir_context_type(g->mu, func);
+   mir_value_t context = mir_build_null(g->mu, t_context);
+   mir_value_t args[] = { context, lvalue.obj };
+
+   mir_value_t func_trig = mir_build_function_trigger(g->mu, func, args, 2);
+   if (func_opposite != NULL) {
+      mir_value_t op_func_trig = mir_build_function_trigger(g->mu, func_opposite,
+                                                            args, 2);
+      func_trig = vlog_or_triggers(g, 2, func_trig, op_func_trig);
+   }
+
+   return func_trig;
+}
+
 static mir_value_t vlog_lower_trigger(vlog_gen_t *g, vlog_node_t v)
 {
    const vlog_kind_t kind = vlog_kind(v);
@@ -2191,35 +2247,7 @@ static mir_value_t vlog_lower_trigger(vlog_gen_t *g, vlog_node_t v)
          return trigger;
       }
    case V_EVENT:
-      {
-         const v_event_kind_t kind = vlog_subkind(v);
-         if (kind == V_EVENT_LEVEL || kind == V_EVENT_EDGE)
-            return vlog_lower_trigger(g, vlog_value(v));
-         else {
-            vlog_select_t lvalue = vlog_lower_select(g, vlog_value(v));
-
-            ident_t func;
-            switch (kind) {
-            case V_EVENT_POSEDGE:
-               func = ident_new("@posedge");
-               mir_defer(mir_get_context(g->mu), func, NULL, MIR_UNIT_FUNCTION,
-                         vlog_lower_posedge_fn, NULL);
-               break;
-            case V_EVENT_NEGEDGE:
-               func = ident_new("@negedge");
-               mir_defer(mir_get_context(g->mu), func, NULL, MIR_UNIT_FUNCTION,
-                         vlog_lower_negedge_fn, NULL);
-               break;
-            default:
-               should_not_reach_here();
-            }
-
-            mir_type_t t_context = mir_context_type(g->mu, func);
-            mir_value_t context = mir_build_null(g->mu, t_context);
-            mir_value_t args[] = { context, lvalue.obj };
-            return mir_build_function_trigger(g->mu, func, args, 2);
-         }
-      }
+      return vlog_lower_event_trigger(g, v, false);
    case V_NUMBER:
       return MIR_NULL_VALUE;
    case V_BINARY:
@@ -3634,6 +3662,18 @@ static mir_value_t vlog_lower_tcheck_event(vlog_gen_t *g, vlog_node_t v)
    return cond;
 }
 
+static mir_value_t vlog_lower_get_current_time(vlog_gen_t *g)
+{
+   ident_t now_func =
+      ident_new("STD.STANDARD.NOW()25STD.STANDARD.DELAY_LENGTH");
+   mir_type_t t_time = mir_time_type(g->mu);
+   mir_value_t pkg = mir_build_link_package(g->mu, well_known(W_STD_STANDARD));
+   mir_value_t args[1] = { pkg };
+   mir_value_t now = mir_build_fcall(g->mu, now_func, t_time, MIR_NULL_STAMP,
+                                       args, ARRAY_LEN(args));
+   return now;
+}
+
 static void vlog_lower_tcheck(vlog_gen_t *g, vlog_node_t tcheck)
 {
    vlog_tcheck_kind_t tkind = vlog_subkind(tcheck);
@@ -3707,13 +3747,7 @@ static void vlog_lower_tcheck(vlog_gen_t *g, vlog_node_t tcheck)
          mir_value_t t2 = mir_build_load(g->mu, trigger_var);
          mir_build_clear_event(g->mu, t2, MIR_NULL_VALUE);
 
-         // Get current time
-         ident_t now_func =
-            ident_new("STD.STANDARD.NOW()25STD.STANDARD.DELAY_LENGTH");
-         mir_value_t pkg = mir_build_link_package(g->mu, well_known(W_STD_STANDARD));
-         mir_value_t args[1] = { pkg };
-         mir_value_t now = mir_build_fcall(g->mu, now_func, t_time, MIR_NULL_STAMP,
-                                           args, ARRAY_LEN(args));
+         mir_value_t now = vlog_lower_get_current_time(g);
 
          // Check if events occured at this simulation time
          mir_value_t stamp_cond = vlog_lower_tcheck_event(g, v_stamp);
@@ -3756,6 +3790,194 @@ static void vlog_lower_tcheck(vlog_gen_t *g, vlog_node_t tcheck)
          mir_set_cursor(g->mu, sample_bb, MIR_APPEND);
          mir_build_store(g->mu, stamp_var, now);
          mir_build_jump(g->mu, start_bb);
+      }
+      break;
+
+   case V_TCHECK_PERIOD:
+   case V_TCHECK_WIDTH:
+      {
+         assert(vlog_params(tcheck) >= 2);
+
+         vlog_node_t v_ev = vlog_param(tcheck, 0);
+         assert(vlog_kind(v_ev) == V_TCHECK_EVENT);
+         vlog_node_t v_limit = vlog_param(tcheck, 1);
+
+         vlog_node_t sig_ev = vlog_param(v_ev, 0);
+         assert(vlog_kind(sig_ev) == V_EVENT);
+
+         v_event_kind_t ev_kind = vlog_subkind(sig_ev);
+
+         mir_value_t trigger = vlog_lower_trigger(g, sig_ev);
+         assert(!mir_is_null(trigger));
+
+         // TODO: For "edge" the process must wake on posedge and negedge,
+         // but remember when each of these occured separately since
+         // upon next equal edge the t-check condition is checked!
+         if (ev_kind == V_EVENT_EDGE)
+            CANNOT_HANDLE(v_ev);
+
+         if (tkind == V_TCHECK_WIDTH) {
+            mir_value_t op_trigger = vlog_lower_event_trigger(g, sig_ev, true);
+            trigger = vlog_or_triggers(g, 2, trigger, op_trigger);
+         }
+
+         mir_type_t t_trigger = mir_trigger_type(g->mu);
+         mir_value_t trigger_var =
+            mir_add_var(g->mu, t_trigger, MIR_NULL_STAMP, ident_new("trigger"), 0);
+         mir_build_store(g->mu, trigger_var, trigger);
+
+         mir_type_t t_time = mir_time_type(g->mu);
+         mir_value_t t_init = mir_const(g->mu, t_time, INT32_MIN);
+         mir_value_t stamp_var = mir_add_var(g->mu, t_time,  MIR_NULL_STAMP,
+                                             ident_new("stamp"), 0);
+         mir_build_store(g->mu, stamp_var, t_init);
+
+         mir_build_return(g->mu, MIR_NULL_VALUE);
+
+         mir_block_t start_bb = mir_add_block(g->mu);
+         assert(start_bb.id == 1);
+
+         mir_set_cursor(g->mu, start_bb, MIR_APPEND);
+
+         mir_value_t t = mir_build_load(g->mu, trigger_var);
+         mir_build_sched_event(g->mu, t, MIR_NULL_VALUE);
+
+         mir_block_t wait_bb = mir_add_block(g->mu);
+         mir_build_wait(g->mu, wait_bb);
+         mir_set_cursor(g->mu, wait_bb, MIR_APPEND);
+
+         mir_value_t t2 = mir_build_load(g->mu, trigger_var);
+         mir_build_clear_event(g->mu, t2, MIR_NULL_VALUE);
+
+         mir_value_t now = vlog_lower_get_current_time(g);
+
+         if (tkind == V_TCHECK_PERIOD) {
+            // We wake only on one edge type, first evaluate and then sample!
+            mir_value_t cond = vlog_lower_tcheck_event(g, v_ev);
+            mir_block_t check_bb = mir_add_block(g->mu);
+            mir_build_cond(g->mu, cond, check_bb, start_bb);
+
+            mir_set_cursor(g->mu, check_bb, MIR_APPEND);
+            mir_value_t stamp = mir_build_load(g->mu, stamp_var);
+            mir_value_t diff_time = mir_build_sub(g->mu, t_time, now, stamp);
+
+            mir_value_t limit_val = vlog_lower_rvalue(g, v_limit);
+            mir_value_t limit_time = mir_build_cast(g->mu, t_time, limit_val);
+            mir_value_t ok = mir_build_cmp(g->mu, MIR_CMP_GEQ, diff_time, limit_time);
+
+            mir_block_t fire_bb = mir_add_block(g->mu);
+            mir_block_t stamp_bb = mir_add_block(g->mu);
+            mir_build_cond(g->mu, ok, stamp_bb, fire_bb);
+
+            mir_set_cursor(g->mu, fire_bb, MIR_APPEND);
+            mir_value_t locus = mir_build_debug_locus(g->mu, vlog_to_object(tcheck));
+            mir_build_tcheck(g->mu, stamp, limit_time, locus);
+            mir_build_jump(g->mu, stamp_bb);
+
+            mir_set_cursor(g->mu, stamp_bb, MIR_APPEND);
+            mir_build_store(g->mu, stamp_var, now);
+            mir_build_jump(g->mu, start_bb);
+         }
+         else {
+            // We wake on both edge kinds. If first edge kind is active sample,
+            // if second is active check
+            mir_value_t cond = vlog_lower_tcheck_event(g, v_ev);
+            mir_block_t edge_get_bb = mir_add_block(g->mu);
+            mir_build_cond(g->mu, cond, edge_get_bb, start_bb);
+
+            mir_build_resolved(g->mu, );
+         }
+      }
+      break;
+
+   case V_TCHECK_WIDTH:
+      {
+         assert(vlog_params(tcheck) >= 2);
+
+         vlog_node_t v_ev = vlog_param(tcheck, 0);
+         assert(vlog_kind(v_ev) == V_TCHECK_EVENT);
+
+         vlog_node_t sig_ev = vlog_param(v_ev, 0);
+         assert(vlog_kind(sig_ev) == V_EVENT);
+
+         v_event_kind_t ev_kind = vlog_subkind(sig_ev);
+
+         mir_value_t trigger = vlog_lower_trigger(g, sig_ev);
+         assert(!mir_is_null(trigger));
+
+         // TODO: For "edge" the process must wake on posedge and negedge,
+         // but remember when each of these occured separately since
+         // upon next equal edge the t-check condition is checked!
+         if (ev_kind == V_EVENT_EDGE) {
+            CANNOT_HANDLE(v_ev);
+         }
+
+         if (tkind == V_TCHECK_WIDTH) {
+            mir_value_t op_trigger = vlog_lower_event_trigger(g, sig_ev, true);
+            trigger = vlog_or_triggers(g, 2, trigger, op_trigger);
+         }
+
+         mir_type_t t_trigger = mir_trigger_type(g->mu);
+         mir_value_t trigger_var =
+            mir_add_var(g->mu, t_trigger, MIR_NULL_STAMP, ident_new("trigger"), 0);
+         mir_build_store(g->mu, trigger_var, trigger);
+
+         mir_type_t t_time = mir_time_type(g->mu);
+         mir_value_t t_zero = mir_const(g->mu, t_time, 0);
+         mir_value_t stamp_var = mir_add_var(g->mu, t_time,  MIR_NULL_STAMP,
+                                             ident_new("stamp"), 0);
+         mir_build_store(g->mu, stamp_var, t_zero);
+
+         mir_build_return(g->mu, MIR_NULL_VALUE);
+
+         mir_block_t start_bb = mir_add_block(g->mu);
+         assert(start_bb.id == 1);
+
+         mir_set_cursor(g->mu, start_bb, MIR_APPEND);
+
+         mir_value_t t = mir_build_load(g->mu, trigger_var);
+         mir_build_sched_event(g->mu, t, MIR_NULL_VALUE);
+
+         mir_block_t wait_bb = mir_add_block(g->mu);
+         mir_build_wait(g->mu, wait_bb);
+         mir_set_cursor(g->mu, wait_bb, MIR_APPEND);
+
+         mir_value_t t2 = mir_build_load(g->mu, trigger_var);
+         mir_build_clear_event(g->mu, t2, MIR_NULL_VALUE);
+
+         mir_value_t now = vlog_lower_get_current_time(g);
+
+         // Period
+         //   - We wake only on one edge type, first evaluate and
+         //     then sample!
+         // Width:
+         //   -
+
+
+
+         if (tkind == V_TCHECK_PERIOD) {
+            mir_value_t stamp = mir_build_load(g->mu, stamp_var);
+            mir_value_t diff_time = mir_build_sub(g->mu, t_time, now, stamp);
+
+            mir_value_t limit_val = vlog_lower_rvalue(g, v_limit);
+            mir_value_t limit_time = mir_build_cast(g->mu, t_time, limit_val);
+            mir_value_t ok = mir_build_cmp(g->mu, MIR_CMP_GEQ, diff_time, limit_time);
+
+            mir_value_t stamp_display = stamp;
+            if (fail_simul) {
+               mir_value_t stamp_cond_n = mir_build_not(g->mu, stamp_cond);
+               ok = mir_build_and(g->mu, ok, stamp_cond_n);
+               stamp_display = mir_build_select(g->mu, t_time, stamp_cond,
+                                                now, stamp);
+            }
+
+            mir_block_t fire_bb = mir_add_block(g->mu);
+            mir_build_cond(g->mu, ok, stamp_bb, fire_bb);
+
+            mir_set_cursor(g->mu, fire_bb, MIR_APPEND);
+            mir_value_t locus = mir_build_debug_locus(g->mu, vlog_to_object(tcheck));
+            mir_build_tcheck(g->mu, stamp_display, limit_time, locus);
+         }
       }
       break;
 

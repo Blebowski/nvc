@@ -1249,6 +1249,18 @@ static void vlog_check_tcheck_event(vlog_node_t v)
       vlog_check_expr(cond);
 }
 
+static void vlog_check_const_expr(vlog_node_t v)
+{
+   type_mask_t tmask = vlog_check_expr(v);
+
+   if ((tmask & TM_CONST) == 0) {
+      diag_t *d = diag_new(DIAG_ERROR, vlog_loc(v));
+      diag_printf(d, "not a constant expression");
+      diag_hint(d, vlog_loc(v), "have '%s'", type_mask_str(tmask));
+      diag_emit(d);
+   }
+}
+
 static void vlog_check_tcheck(vlog_node_t v)
 {
    vlog_tcheck_kind_t kind = vlog_subkind(v);
@@ -1259,15 +1271,22 @@ static void vlog_check_tcheck(vlog_node_t v)
       {
          vlog_check_tcheck_event(vlog_param(v, 0));
          vlog_check_tcheck_event(vlog_param(v, 1));
+         vlog_check_const_expr(vlog_param(v, 2));
+      }
+      break;
+   case V_TCHECK_PERIOD:
+      {
+         vlog_check_tcheck_event(vlog_param(v, 0));
+         vlog_check_const_expr(vlog_param(v, 1));
 
-         vlog_node_t limit = vlog_param(v, 2);
-         type_mask_t tmask = vlog_check_expr(limit);
-
-         if ((tmask & TM_CONST) == 0) {
-            diag_t *d = diag_new(DIAG_ERROR, vlog_loc(limit));
-            diag_printf(d, "not a constant expression");
-            diag_hint(d, vlog_loc(limit), "have '%s'", type_mask_str(tmask));
-            diag_emit(d);
+      }
+      break;
+   case V_TCHECK_WIDTH:
+      {
+         vlog_check_tcheck_event(vlog_param(v, 0));
+         vlog_check_const_expr(vlog_param(v, 1));
+         if (vlog_params(v) > 2) {
+            vlog_check_const_expr(vlog_param(v, 2));
          }
       }
       break;

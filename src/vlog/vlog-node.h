@@ -71,7 +71,9 @@ typedef enum {
    V_TCHECK_SETUP,
    V_TCHECK_HOLD,
    V_TCHECK_RECOVERY,
-   V_TCHECK_REMOVAL
+   V_TCHECK_REMOVAL,
+   V_TCHECK_PERIOD,
+   V_TCHECK_WIDTH
 } vlog_tcheck_kind_t;
 
 typedef enum {

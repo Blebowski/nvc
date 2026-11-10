@@ -4915,6 +4915,8 @@ void x_timing_check(int64_t stamp, int64_t limit, object_t *where)
       [V_TCHECK_HOLD]     = "$hold",
       [V_TCHECK_RECOVERY] = "$recovery",
       [V_TCHECK_REMOVAL]  = "$removal",
+      [V_TCHECK_PERIOD]   = "$period",
+      [V_TCHECK_WIDTH]    = "$width",
    };
 
    rt_model_t *m = get_model();
